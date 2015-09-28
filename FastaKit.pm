@@ -845,7 +845,7 @@ sub Codon2AA {
 }
 ### The Redundancy of the Genetic Code
 sub codon2aa2 {
-    my($codon) = @_;
+    my($CAcodon) = @_;
 	
 	$CAcodon=UC $CAcodon;
 	$CAcodon=~tr/T/U/;
