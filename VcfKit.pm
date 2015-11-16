@@ -140,34 +140,34 @@ sub ExtractVcf {
 	$EVpath_bgzip='bgzip' unless (defined $EVpath_bgzip);
 	
 	unless (defined $EVvcfin and -s $EVvcfin) {
-		print STDERR "${EVsubinfo}Error: VCF input not found: $EVvcfin\n";
+		print STDERR $EVsubinfo, "Error: VCF input not found: $EVvcfin\n";
 		return $VcfKit_failure;
 	}
 	unless ($EVids=~/\S+/) {
-		print STDERR "${EVsubinfo}Error: invalid extract ids\n";
+		print STDERR $EVsubinfo, "Error: invalid extract ids\n";
 		return $VcfKit_failure;
 	}
 	if ($EVvcfin=~/\.vcf$/i) {
-		if (! &BgzipVcf($EVvcfin, "$EVvcfin.gz", $EVpath_bgzip)) {
-			print STDERR "${EVsubinfo}Error: VCF bgzip error: $EVvcfin\n";
+		unless (&BgzipVcf($EVvcfin, "$EVvcfin.gz", $EVpath_bgzip)) {
+			print STDERR $EVsubinfo, "Error: VCF bgzip error: $EVvcfin\n";
 			return $VcfKit_failure;
 		}
 		$EVvcfin="$EVvcfin.gz";
 	}
 	unless (-s "$EVvcfin.tbi") {
-		if (! &IndexVcf($EVvcfin, $EVpath_tabix)) {
-			print STDERR "${EVsubinfo}Error: VCF bgzip error: $EVvcfin\n";
+		unless (&IndexVcf($EVvcfin, $EVpath_tabix)) {
+			print STDERR $EVsubinfo, "Error: VCF bgzip error: $EVvcfin\n";
 			return $VcfKit_failure;
 		}
 	}
 	unlink $EVvcfout if (-e $EVvcfout);
 	
 	if (! &exec_cmd_return("$EVpath_tabix $EVvcfin $EVids | $EVpath_bgzip > $EVvcfout")) {
-		print STDERR "${EVsubinfo}Error: tabix extract running error\n";
+		print STDERR $EVsubinfo, "Error: tabix extract running error\n";
 		return $VcfKit_failure;
 	}
-	elsif ( ! -e $EVvcfout) {
-		print STDERR "${EVsubinfo}Error: tabix extract output error\n";
+	elsif (! -e $EVvcfout) {
+		print STDERR $EVsubinfo, "Error: tabix extract output error\n";
 		return $VcfKit_failure;
 	}
 	return $VcfKit_success;
