@@ -51,9 +51,9 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20150603';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(IndexBam ExtactBam SamCleanHeader SplitCigar Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam);
-%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar Bam2FastQ SortBam CalcFPKM ReadSam)],
-                 Both    => [qw(IndexBam ExtactBam SamCleanHeader Bam2FastQ SortBam CalcFPKM ReadSam)]);
+@EXPORT_OK   = qw(IndexBam ExtactBam SamCleanHeader SplitCigar Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg);
+%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar Bam2FastQ SortBam CalcFPKM ReadSam Bam2FastqProg)],
+                 Both    => [qw(IndexBam ExtactBam SamCleanHeader Bam2FastQ SortBam CalcFPKM ReadSam Bam2FastqProg)]);
 
 
 
@@ -561,6 +561,61 @@ sub Bam2FastQ {
 	close BAMIN;
 	close FQOUT;
 	return $BamKit_success;
+}
+
+
+
+### convert BAM to FASTQ using bam2fastq program
+### Bam2FastqProg(BAM, additional_amd, path_bam2fastq)
+### Global: $BamKit_success $BamKit_failure
+### Dependency: 
+### Note:
+### Return (1/0, \%hash=('R1' => $fastqR1, 'R2' => $fastqR2, 'M' => $fastqUnpaired)
+sub Bam2FastqProg {
+	my ($BFPbamfile, $BFPprefix, $BFPadd_cmd, $BFPpath_bam2fastq)=@_;
+	
+	my $BFPsubinfo='SUB(Bam2FastqProg)';
+	$BFPpath_bam2fastq='bam2fastq' unless (defined $BFPpath_bam2fastq);
+	$BFPprefix="MyFastq" unless (defined $BFPprefix and $BFPprefix=~/^\S+$/);
+	my %BFQfastqfiles=();
+	my $BFPtestout=0;
+	
+	unless (defined $BFPbamfile and -s $BFPbamfile) {
+		print STDERR $BFPsubinfo, "Error: invalid BAM file for fastq: $BFPbamfile\n";
+		return $BamKit_failure;
+	}
+	unless (exec_cmd_return("$BFPpath_bam2fastq -o $BFPprefix.R#.fq --quiet --aligned $BFPbamfile")) {
+		print STDERR $BFPsubinfo, "Error: bam2fastq running error\n";
+		return $BamKit_failure;
+	}
+	if (-s "$BFPprefix.R_1.fq") {
+		$BFPtestout++;
+		$BFQfastqfiles{'R1'}="$BFPprefix.R_1.fq";
+	}
+	elsif (-e "$BFPprefix.R_1.fq") {
+		unlink "$BFPprefix.R_1.fq";
+	}
+	if (-s "$BFPprefix.R_2.fq") {
+		$BFPtestout++;
+		$BFQfastqfiles{'R2'}="$BFPprefix.R_2.fq";
+	}
+	elsif (-e "$BFPprefix.R_2.fq") {
+		unlink "$BFPprefix.R_2.fq";
+	}
+	if (-s "$BFPprefix.R_M.fq") {
+		$BFPtestout++;
+		$BFQfastqfiles{'M'}="$BFPprefix.R_M.fq";
+	}
+	elsif (-e "$BFPprefix.R_M.fq") {
+		unlink "$BFPprefix.R_M.fq";
+	}
+	
+	unless ($BFPtestout >0) {
+		print STDERR $BFPsubinfo, "Error: bam2fastq output error\n";
+		return $BamKit_failure;
+	}
+	
+	return ($BamKit_success, \%BFQfastqfiles);
 }
 
 
