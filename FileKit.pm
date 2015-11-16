@@ -46,7 +46,7 @@ use warnings;
 use Exporter;
 use File::Copy;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20150603';
+$VERSION     = '20151106';
 @ISA         = qw(Exporter);
 @EXPORT      = qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath MoveFile CopyFile MergeFiles);
 @EXPORT_OK   = qw();
@@ -260,7 +260,7 @@ sub MergeFiles {
 		return $FileKit_failure;
 	}
 	foreach my $MFindfile (@MFfiles2merge) {
-		print $MFsubinfo, "Test: Mergeing file: $MFindfile\n"; ### For test ###
+#		print $MFsubinfo, "Test: Mergeing file: $MFindfile\n"; ### For test ###
 		unless (-s $MFindfile) {
 			print STDERR $MFsubinfo, "Warnings: not existed file to be merged: $MFindfile\n" unless (-e $MFindfile); ### For test ###
 			next;
@@ -275,10 +275,10 @@ sub MergeFiles {
 		}
 		close MFIN;
 	}
-	print $MFsubinfo, "Test: merging file finished: $MFout\n";
+#	print $MFsubinfo, "Test: merging file finished: $MFout\n"; ### For test ###
 	close MFOUT;
 	if (-s $MFout) {
-		print $MFsubinfo, "Test: $MFout\n";
+#		print $MFsubinfo, "Test: $MFout\n"; ### For test ###
 		return $FileKit_success;
 	}
 	else {
