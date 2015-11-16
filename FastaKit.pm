@@ -45,12 +45,12 @@ use FuhaoPerl5Lib::FileKit qw/MoveFile RetrieveDir MergeFiles/;
 use FuhaoPerl5Lib::CmdKit;
 use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20150603';
+$VERSION     = '20151106';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp);
-%EXPORT_TAGS = ( DEFAULT => [qw(&CdbFasta &CdbYank &IndexFasta &CreateFastaRegion &RunMira4 &RenameFasta &RunFqTrinity &SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp)],
-                 ALL    => [qw(&CdbFasta &CdbYank &IndexFasta &CreateFastaRegion &RunMira4 &RenameFasta &RunFqTrinity &SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA);
+%EXPORT_TAGS = ( DEFAULT => [qw(&CdbFasta &CdbYank &IndexFasta &CreateFastaRegion &RunMira4 &RenameFasta &RunFqTrinity &SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA)],
+                 ALL    => [qw(&CdbFasta &CdbYank &IndexFasta &CreateFastaRegion &RunMira4 &RenameFasta &RunFqTrinity &SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -381,7 +381,7 @@ sub CreateFastaRegion {
 ### Return: 0=failure; 1=success
 sub RunMira4 {
 	my ($RMfastq, $RMmira_manifest, $RMassembly_fasta, $RMseq_prefix, $RMmin_alternative_count, $RMpath_mira4, $RMnum_threads)=@_;
-#	return $FastaKit_failure; ### For test RunCap3 ###
+#	return $FastaKit_failure; ### For test RunMira4 ###
 	local *MANIFEST; local *RMOUT; local *RMFA;
 	my $RMsubinfo='SUB(FastaKit::RunMira)';
 	my $RMreturn_fasta;
@@ -502,11 +502,12 @@ sub RunCap3 {
 		return $FastaKit_failure;
 	}
 	my @RCoutputs = map{$RCreads.$_}(".cap.contigs", ".cap.singlets");
-	print $RCsubinfo, "Test: @RCoutputs\n";
+#	print $RCsubinfo, "Test: @RCoutputs\n"; ### For test ###
 	unless (MergeFiles($RCout, @RCoutputs)) {
 		print STDERR $RCsubinfo, "Error: merge CAP3 out error\n";
 		return $FastaKit_failure;
 	}
+	unlink glob "$RCreads.*";
 	if (-s $RCout) {
 		return $FastaKit_success;
 	}
@@ -833,7 +834,7 @@ sub SeqRevComp {
 sub Codon2AA {
 	my $CAcodon=shift;
 	
-	$CAcodon=UC $CAcodon;
+	$CAcodon=uc $CAcodon;
 	$CAcodon=~tr/T/U/;
 	
 	if (exists $genetic_code{$CAcodon}) {
@@ -874,6 +875,21 @@ sub codon2aa2 {
     else {
         return '?';
     }
+}
+
+
+
+### Try 6 frame translation and select longest for each
+sub Codon6EL2aa {
+	###
+}
+### Try 6 frame translation and select longest for all
+sub Codon6AL2aa {
+	###
+}
+### Try 6 frame translation
+sub Codon6aa {
+	###
 }
 
 
