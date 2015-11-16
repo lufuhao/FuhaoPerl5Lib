@@ -185,6 +185,9 @@ sub CallCorrelation {
 	my $ssxx=&CallSqDev($CCarr1, $CCarr1, $mean_x, $mean_x);
 	my $ssyy=&CallSqDev($CCarr2, $CCarr2, $mean_y, $mean_y);
 	my $ssxy=&CallSqDev($CCarr1, $CCarr2, $mean_x, $mean_y);
+	if ($ssxy==0) {
+		return ($StatsKit_success, 1, 0, $CCVelements);
+	}
 	my $cov=$ssxy/$CCVelements;
 	my $correl=&CallCorrel($ssxx,$ssyy,$ssxy);
 	my $xcorrel=sprintf("%.4f",$correl);
