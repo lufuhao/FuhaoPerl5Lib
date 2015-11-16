@@ -1145,7 +1145,9 @@ sub ReadHaptreeOut {
 		foreach my $RHOind_fixallele (keys %RHOfixarr) {
 			foreach my $RHOind_phasing (keys %RHOphase) {
 				my ($RHOcorr_retcode, $RHOcov, $RHOcor, $RHOnum)=&CallCorrelation(\@{$RHOfixarr{$RHOind_fixallele}}, \@{$RHOphase{$RHOind_phasing}});
-				${${$RHOcorrelation{$RHOblock}}{$RHOind_phasing}}{$RHOind_fixallele}=$RHOcor;
+				unless ($RHOcorr_retcode) {
+					${${$RHOcorrelation{$RHOblock}}{$RHOind_phasing}}{$RHOind_fixallele}=$RHOcor;
+				}
 			}
 		}
 	}
@@ -2136,7 +2138,7 @@ sub ReadHcOut {
 #		print $RHOsubinfo, "Test: BLOCK $RHOind_block2 \%RHOgroup2genome\n"; print Dumper \%RHOgroup2genome; print "\n"; ### For test ###
 #		print $RHOsubinfo, "Test: BLOCK $RHOind_block2 \%RHOgenome2group\n"; print Dumper \%RHOgenome2group; print "\n"; ### For test ###
 	}}###RHOBLOCK1
-	print $RHOsubinfo, "Test: \$RHOfixalleles\n"; print Dumper $RHOfixalleles; print "\n"; ### For test ###
+#	print $RHOsubinfo, "Test: \$RHOfixalleles\n"; print Dumper $RHOfixalleles; print "\n"; ### For test ###
 #	print $RHOsubinfo, "Test: \$RHOexcludedchrom\n"; print Dumper $RHOexcludedchrom; print "\n"; ### For test ###
 	foreach my $RHOchrom (keys %{$RHOfixalleles}) {
 		next if (exists ${$RHOexcludedchrom}{$RHOchrom});
