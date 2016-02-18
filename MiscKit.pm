@@ -45,14 +45,16 @@ use strict;
 use warnings;
 use Exporter;
 use Scalar::Util 'reftype';
+use File::Which;
 use Cwd;
+
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20150603';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit);
-%EXPORT_TAGS = ( DEFAULT => [qw(&IsReference &IsZeroIn &TestIntersect &MaxLength &FullDigit)],
-                 ALL    => [qw(&IsReference &IsZeroIn &TestIntersect &MaxLength &FullDigit)]);
+%EXPORT_TAGS = ( DEFAULT => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit)],
+                 ALL    => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit)]);
 
 
 my $MiscKit_success=1;
@@ -229,5 +231,6 @@ sub FullDigit {
 }
 
 
+#$MiscKit_success=1;$MiscKit_failure=0;
 
 1;
