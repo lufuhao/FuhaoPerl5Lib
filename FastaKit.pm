@@ -45,12 +45,12 @@ use FuhaoPerl5Lib::FileKit qw/MoveFile RetrieveDir MergeFiles/;
 use FuhaoPerl5Lib::CmdKit;
 use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20151106';
+$VERSION     = '20151208';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA);
-%EXPORT_TAGS = ( DEFAULT => [qw(&CdbFasta &CdbYank &IndexFasta &CreateFastaRegion &RunMira4 &RenameFasta &RunFqTrinity &SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA)],
-                 ALL    => [qw(&CdbFasta &CdbYank &IndexFasta &CreateFastaRegion &RunMira4 &RenameFasta &RunFqTrinity &SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta);
+%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta)],
+                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -133,7 +133,7 @@ my %genetic_code = (
 ### my ($test_cdbfasta, $cdbfasta_index)=&CdbFasta(fasta_file, [path_cdbfasta])
 ### Global:
 ### Dependancy: &exec_cmd_return
-### Note:
+### Note: NOT works very well for massive IDs
 sub CdbFasta {
 	my ($CSfasta_file, $CFpath_cdbfasta)=@_;
 	
@@ -182,6 +182,7 @@ sub CdbYank {
 		return $FastaKit_failure;
 	}
 	unlink $CYoutput if (-e $CYoutput);
+#Returncode (0=NotRef, 1=ScalarRef, 2=ArrayRef, 3=HashExtractFastaSamtoolsRef, 4=Unknown)
 	my $test_id_reference=&IsReference($CYseq_ids_index);
 	my $CYseqids_join='';
 	if ($test_id_reference>0) {
@@ -201,7 +202,6 @@ sub CdbYank {
 			print STDERR "${CYsubinfo}Error: unknown seqids reference type\n";
 			return $FastaKit_failure;
 		}
-		undef $CYseq_ids_index;
 	}
 	
 	unless (defined $CYseqids_join and $CYseqids_join=~/\S+/) {
@@ -220,6 +220,89 @@ sub CdbYank {
 	}
 	return $FastaKit_success;
 }
+
+
+
+### Extract fasta sequences using a file containing a list of IDs, 1 ID perl line
+### &ExtractFastaSamtools(my.fa, output.fa, fasta_id_file, [path_samtools]);
+### Return: 0=fail; 1=success
+### Global:
+### Dependancy: &exec_cmd_return
+### Note: 
+sub ExtractFastaSamtools {
+	my ($EFSinputfa, $EFSoutputfa, $EFSidlist, $EFSpath_samtools)=@_;
+	
+	my $EFSsubinfo='SUB(FastaKit::ExtractFastaSamtools)';
+	$EFSpath_samtools='samtools' unless (defined $EFSpath_samtools);
+	
+	unless (defined $EFSinputfa and -s $EFSinputfa) {
+		print STDERR $EFSsubinfo, "Error: invalid input fasta file: $EFSinputfa\n";
+		return $FastaKit_failure;
+	}
+	unless (-s "$EFSinputfa.fai") {
+		unless (&IndexFasta($EFSinputfa, $EFSpath_samtools)) {
+			print STDERR $EFSsubinfo, "Error: unable to index fasta file: $EFSinputfa\n";
+			return $FastaKit_failure;
+		}
+	}
+	unless (defined $EFSidlist and -s $EFSidlist) {
+		print STDERR $EFSsubinfo, "Error: invalid fasta ID list file: $EFSidlist\n";
+		return $FastaKit_failure;
+	}
+	unless (defined $EFSoutputfa and $EFSoutputfa=~/^\S+$/) {
+		print STDERR $EFSsubinfo, "Error: invalid output fasta file: $EFSoutputfa\n";
+		return $FastaKit_failure;
+	}
+	unlink $EFSoutputfa if (-e $EFSoutputfa);
+	
+	unless (&exec_cmd_return("$EFSpath_samtools faidx $EFSinputfa `cat $EFSidlist` > $EFSoutputfa")) {
+		print STDERR $EFSsubinfo, "Error: samtools extract fasta running error\n";
+		return $FastaKit_failure;
+	}
+	unless (-s $EFSoutputfa) {
+		print STDERR $EFSsubinfo, "Error: samtools extract fasta output error: $EFSoutputfa\n";
+		return $FastaKit_failure;
+	}
+	return $FastaKit_success;
+}
+
+
+
+### Retrieve fasta sequences using a file containing a list of IDs, 1 ID perl line
+### &CdbYank(cdbfasta_index, $CYoutput, $CYfasta_id_file, [path_cdbyank]);
+### Return: 0=fail; 1=success
+### Global:
+### Dependancy: &exec_cmd_return
+### Note: 
+sub CdbYankFromFile {
+	my ($CYFFindex, $CYFFoutput, $CYFFseqidsfile, $CYFFpath_cdbyank)=@_;
+	
+	local *CYFFID;
+	$CYFFpath_cdbyank='cdbyank' unless (defined $CYFFpath_cdbyank);
+	my $CYFFsubinfo='SUB(FastaKit::CdbYankFromFile)';
+	
+	unless (defined $CYFFindex and -s $CYFFindex) {
+		print STDERR $CYFFsubinfo, "Error: invalid cdbfasta index: $CYFFindex\n";
+		return $FastaKit_failure;
+	}
+	unlink $CYFFoutput if (-e $CYFFoutput);
+	unless (-s $CYFFseqidsfile) {
+		print STDERR $CYFFsubinfo, "Error: Invalid Fasta ID list file: $CYFFseqidsfile\n";
+		return $FastaKit_failure;
+	}
+	
+	my $CYFFcmd="cat $CYFFseqidsfile | $CYFFpath_cdbyank $CYFFindex -o $CYFFoutput -w";
+	if (! &exec_cmd_return($CYFFcmd)) {
+		print STDERR $CYFFsubinfo, "Error: cdbyank running error\n";
+		return $FastaKit_failure;
+	}
+	elsif (! -s $CYFFoutput) {
+		print STDERR $CYFFsubinfo, "Error: cdbyank output error\n";
+		return $FastaKit_failure;
+	}
+	return $FastaKit_success;
+}
+
 
 
 
@@ -380,7 +463,7 @@ sub CreateFastaRegion {
 ### Note: Be sure to chdir back in case of any error
 ### Return: 0=failure; 1=success
 sub RunMira4 {
-	my ($RMfastq, $RMmira_manifest, $RMassembly_fasta, $RMseq_prefix, $RMmin_alternative_count, $RMpath_mira4, $RMnum_threads)=@_;
+	my ($RMfastq, $RMmira_manifest, $RMassembly_fasta, $RMseq_prefix, $RMmin_alternative_count, $RMpath_mira4, $RMnum_threads, $RMtmpdir)=@_;
 #	return $FastaKit_failure; ### For test RunMira4 ###
 	local *MANIFEST; local *RMOUT; local *RMFA;
 	my $RMsubinfo='SUB(FastaKit::RunMira)';
@@ -390,6 +473,7 @@ sub RunMira4 {
 	$RMnum_threads=1 unless (defined $RMnum_threads);
 	my $RMcurpath=getcwd;
 	$RMseq_prefix='MyHapAssem_' unless (defined $RMseq_prefix);
+	$RMtmpdir='' unless (defined $RMtmpdir and $RMtmpdir ne '');
 	
 	unless (defined $RMmira_manifest and $RMmira_manifest=~/^\S+$/) {
 		print STDERR "${RMsubinfo}Error: invalid MIRA4 manifest file\n";
@@ -414,7 +498,9 @@ sub RunMira4 {
 	}
 	my $RMproject='Ta';
 	my $RMjob='denovo,est,accurate';
-	my $RMparameters="COMMON_SETTINGS -GENERAL:number_of_threads=$RMnum_threads -NAG_AND_WARN:cnfs=warn:check_template_problems=no:check_maxreadnamelength=no -CO:mark_repeats=yes:assume_snp_instead_repeat=yes:name_prefix=$RMseq_prefix -OUT:output_result_caf=no:output_result_tcs=no:output_result_maf=no SOLEXA_SETTINGS -CO:min_reads_per_group=$RMmin_alternative_count -AS:minimum_reads_per_contig=3";
+	my $RMparameters="COMMON_SETTINGS -GENERAL:number_of_threads=$RMnum_threads -NAG_AND_WARN:cnfs=warn:check_template_problems=no:check_maxreadnamelength=no -CO:mark_repeats=yes:assume_snp_instead_repeat=yes:name_prefix=$RMseq_prefix -OUT:output_result_caf=no:output_result_tcs=no:output_result_maf=no ";
+	$RMparameters.=" -DI:tmp_redirected_to=$RMtmpdir " if ($RMtmpdir ne '');
+	$RMparameters.=" SOLEXA_SETTINGS -CO:min_reads_per_group=$RMmin_alternative_count -AS:minimum_reads_per_contig=3";
 	print MANIFEST "project = $RMproject\njob = $RMjob\nparameters = $RMparameters\n###Readgroup\n";
 	print MANIFEST "readgroup = wheat\nautopairing\ndata = $RMfastq\ntechnology = solexa\ntemplate_size = 50 1000 autorefine\nsegment_placement = ---> <---\n";
 	close MANIFEST;
@@ -476,12 +562,13 @@ sub RunCap3 {
 	
 	my $RCsubinfo='SUB(FastaKit::RunCap3)';
 	$RCpath_cap3='cap3' unless (defined $RCpath_cap3);
+	my @RCtempsuf=('.cap.ace', '.cap.contigs', '.cap.contigs.links', '.cap.contigs.qual', '.cap.info', '.cap.singlets');
 	
 	unless (-s $RCreads) {
 		print STDERR "Error: invalid CAP3 input\n";
 		return $FastaKit_failure;
 	}
-	if ($RCreads=~/(\.fasta$)|(\.fa$)/i) {
+	if ($RCreads=~/(\.fasta$)|(\.fa$)|(\.fas$)/i) {
 #		print $RCsubinfo, "Info: Cap3 input in fasta format\n"; ### For test ###
 	}
 	elsif ($RCreads=~/(\.fastq$)|(\.fq$)/i) {
@@ -507,11 +594,16 @@ sub RunCap3 {
 		print STDERR $RCsubinfo, "Error: merge CAP3 out error\n";
 		return $FastaKit_failure;
 	}
-	unlink glob "$RCreads.*";
+#	unlink glob "$RCreads.*";
+	foreach (@RCtempsuf) {
+		my $RCtempfile=$RCreads.$_;
+		unlink $RCtempfile if (-e $RCtempfile);
+	}
 	if (-s $RCout) {
 		return $FastaKit_success;
 	}
 	else {
+		print STDERR $RCsubinfo, "Error: RunCap3 output error\n";
 		return $FastaKit_failure;
 	}
 }
@@ -879,6 +971,49 @@ sub codon2aa2 {
 
 
 
+### Calculate and get fasta parameters
+### CountFasta(my.fasta, code)
+### Global: 
+### Dependency: 
+### Note: comma delimited codes: Code 1 = total_num_seqs
+### Return: 
+sub CountFasta {
+	my ($CFinputfa, $CFcode)=@_;
+	
+	my $CFsubinfo="SUB(MiscKit::CountFasta)";
+	my %CFcodehash=(); ### For code dependency in future
+	my $CFnumseqs=0;
+	local *CFINPUTFASTA;
+	my @CFreturnarr=();
+	
+	unless (defined $CFcode and $CFcode=~/^\S+$/) {
+		print STDERR  $CFsubinfo, "Error: invalid fasta count code\n";
+		return $FastaKit_failure;
+	}
+	my @CTcodearr=split(/,/, $CFcode);
+	
+	close CFINPUTFASTA if (defined fileno(CFINPUTFASTA));
+	unless (open (CFINPUTFASTA, "< $CFinputfa")) {
+		print STDERR  $CFsubinfo, "Error: unable to open fasta file: $CFinputfa\n";
+		return $FastaKit_failure;
+	}
+	while (my $CFline=<CFINPUTFASTA>) {
+		chomp $CFline;
+		if ($CFline=~/^>\S+/) {
+			$CFnumseqs++;
+		}
+	}
+	close CFINPUTFASTA;
+	
+	foreach my $CFindcode (@CTcodearr) {
+		push (@CFreturnarr, $CFnumseqs) if ($CFindcode==1);
+		### For development
+	}
+	return ($FastaKit_success, @CFreturnarr);
+}
+
+
+
 ### Try 6 frame translation and select longest for each
 sub Codon6EL2aa {
 	###
@@ -894,4 +1029,5 @@ sub Codon6aa {
 
 
 
+#$FastaKit_failure; $FastaKit_success;
 1;
