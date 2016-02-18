@@ -133,4 +133,25 @@ sub exec_cmd_return {
 
 
 
+
+
+### Test a external cmd exists in PATH
+### Global: 
+sub CanRun {
+	my $CRcmd=shift;
+	
+	my $CRsubinfo='SUB(MiscKit::CanRun)';
+	my $CRpath=which ("$CRcmd");
+	
+	if (-s $CRpath and -x $CRpath) {
+		return $$CmdKit_success;
+	}
+	else {
+		print STDERR "Error: cmd $CRcmd not exists\n";
+		return $CmdKit_failure;
+	}
+}
+
+
+
 1;
