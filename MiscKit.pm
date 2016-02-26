@@ -45,7 +45,6 @@ use strict;
 use warnings;
 use Exporter;
 use Scalar::Util 'reftype';
-use File::Which;
 use Cwd;
 
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
