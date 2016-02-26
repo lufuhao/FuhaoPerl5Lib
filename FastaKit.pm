@@ -48,9 +48,9 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20151208';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta);
-%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta)],
-                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup);
+%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup)],
+                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -731,7 +731,7 @@ sub RunFqTrinity {
 		return $FastaKit_failure;
 	}
 	
-	unless (exec_cmd_return("$path_trinity --seqType $RQTseqtype --single $RQTfastq $RQTadd_cmd --full_cleanup --output $RQToutput > trinity.log 2> trinity.err")) {
+	unless (exec_cmd_return("$path_trinity --seqType $RQTseqtype --single $RQTfastq $RQTadd_cmd --output $RQToutput > trinity.log 2> trinity.err")) {
 		print STDERR $RQTsubinfo, "Error: Trinity running error\n";
 		return $FastaKit_failure;
 	}
@@ -1010,6 +1010,52 @@ sub CountFasta {
 		### For development
 	}
 	return ($FastaKit_success, @CFreturnarr);
+}
+
+
+
+### check if duplicated sequence ID in fasta
+### CheckFastaIdDup (my.fasta)
+### Global: 
+### Dependency: 
+### Note:
+### Return: 1=NO_duplicate; 0=Error_or_have duplicate
+sub CheckFastaIdDup {
+	my $CFIDfasta=shift;
+	
+	my $CFIDsubinfo="SUB(MiscKit::CheckFastaIdDup)";
+	my %CFIDfastaID=();
+	my $CFIDnum_duplicated_ID=0;
+	local *CFIDFASTA;
+	
+	unless (defined $CFIDfasta and -s $CFIDfasta) {
+		print STDERR $CFIDsubinfo, "Error: fasta file not found\n";
+		return $FastaKit_failure;
+	}
+	close CFIDFASTA if (defined fileno(CFIDFASTA));
+	unless (open (CFIDFASTA, "<$CFIDfasta")) {
+		print STDERR $CFIDsubinfo, "Error: can not open fasta file: $CFIDfasta\n";
+		return $FastaKit_failure;
+	}
+	while (my $CFIDline=<CFIDFASTA>) {
+		if ($CFIDline=~/^>(\S+)\s*.*/) {
+			if (exists $CFIDfastaID{$1}) {
+				print "Duplicate\t".$1."\n";
+				$CFIDnum_duplicated_ID++;
+			}
+			else {
+				$CFIDfastaID{$1}++;
+			}
+		}
+	}
+	close CFIDFASTA;
+	if ($CFIDnum_duplicated_ID>0) {
+		print $CFIDsubinfo, "Info: total number of duplicates: $CFIDnum_duplicated_ID\n";
+		return $FastaKit_failure;
+	}
+	elsif ($CFIDnum_duplicated_ID==0) {
+		return $FastaKit_success;
+	}
 }
 
 
