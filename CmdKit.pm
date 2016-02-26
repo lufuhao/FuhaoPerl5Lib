@@ -50,13 +50,14 @@ package FuhaoPerl5Lib::CmdKit;
 use strict;
 use warnings;
 use Exporter;
+use File::Which;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20150603';
 @ISA         = qw(Exporter);
-@EXPORT      = qw(CurrentTime exec_cmd exec_cmd_return);
+@EXPORT      = qw(CurrentTime exec_cmd exec_cmd_return CanRun);
 @EXPORT_OK   = qw();
-%EXPORT_TAGS = ( DEFAULT => [qw(&CurrentTime &exec_cmd &exec_cmd_return)],
-                 ALL    => [qw(&CurrentTime &exec_cmd &exec_cmd_return &CurrentTime)]);
+%EXPORT_TAGS = ( DEFAULT => [qw(CurrentTime exec_cmd exec_cmd_return  CanRun)],
+                 ALL    => [qw(CurrentTime exec_cmd exec_cmd_return CurrentTime CanRun)]);
 
 my $CmdKit_success=1;
 my $CmdKit_failure=0;
@@ -137,6 +138,7 @@ sub exec_cmd_return {
 
 ### Test a external cmd exists in PATH
 ### Global: 
+### Dependency: File::Which;
 sub CanRun {
 	my $CRcmd=shift;
 	
@@ -144,7 +146,7 @@ sub CanRun {
 	my $CRpath=which ("$CRcmd");
 	
 	if (-s $CRpath and -x $CRpath) {
-		return $$CmdKit_success;
+		return $CmdKit_success;
 	}
 	else {
 		print STDERR "Error: cmd $CRcmd not exists\n";
