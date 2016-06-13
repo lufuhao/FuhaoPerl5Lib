@@ -182,7 +182,7 @@ sub CdbYank {
 		return $FastaKit_failure;
 	}
 	unlink $CYoutput if (-e $CYoutput);
-#Returncode (0=NotRef, 1=ScalarRef, 2=ArrayRef, 3=HashExtractFastaSamtoolsRef, 4=Unknown)
+#Returncode (0=NotRef, 1=ScalarRef, 2=ArrayRef, 3=HashRef, 4=Unknown)
 	my $test_id_reference=&IsReference($CYseq_ids_index);
 	my $CYseqids_join='';
 	if ($test_id_reference>0) {
