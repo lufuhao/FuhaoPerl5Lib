@@ -48,12 +48,12 @@ use FuhaoPerl5Lib::FileKit;
 use FuhaoPerl5Lib::MiscKit qw(IsReference);
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 
-$VERSION     = '20150603';
+$VERSION     = '20160613';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(IndexBam ExtactBam SamCleanHeader SplitCigar Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg);
-%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar Bam2FastQ SortBam CalcFPKM ReadSam Bam2FastqProg)],
-                 Both    => [qw(IndexBam ExtactBam SamCleanHeader Bam2FastQ SortBam CalcFPKM ReadSam Bam2FastqProg)]);
+@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength);
+%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength)],
+                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength)]);
 
 
 
@@ -473,6 +473,62 @@ sub SplitCigar {
 }
 
 
+
+### Verify Cigar length == readlength
+### VerifyCigarLength ($CIGAR, $READLENGTH);
+### Global: None
+### Dependancy:
+### Note:
+sub VerifyCigarLength {
+	my ($VCLcigar, $VCLlength)=@_;
+	
+	my $VCLsubinfo='SUB(BamKit::VerifyCigarLength)';
+	
+	my $VCLcigarOperations = &SplitCigar($VCLcigar);
+	my $VCLcigar_cal_length=0;
+	foreach (@{$VCLcigarOperations}){#calcular cigar length
+		unless (defined $_->[0] and defined $_->[1]) {
+			print STDERR $VCLsubinfo, "Warnings: invalid cigar: $VCLcigar\n";
+			return 0;
+		}
+		if ($_->[1] =~/^[MZIS=X]{1}$/) {
+			$VCLcigar_cal_length+=$_->[0];
+		}
+	}
+	if ($VCLcigar_cal_length == $VCLlength) {
+		return 1;
+	}
+	else {
+		print STDERR $VCLsubinfo, "Warnings: cigar: $VCLcigar length != read length $VCLcigar\n";
+		return 0;
+	}
+}
+
+
+
+### calculate reference length based cigar
+### CalCigarRefLength (CIGAR)
+### Global: None
+### Dependancy:
+### Return the reference length of that alignment in BAM
+sub CalCigarRefLength {
+	my ($CCRLcigar)=shift;
+	
+	my $CCRLsubinfo='SUB(BamKit::CalCigarRefLength)';
+	
+	my $CCRLcigarOperations = &SplitCigar($CCRLcigar);
+	my $CCRLcigar_cal_length=0;
+	foreach (@{$CCRLcigarOperations}){#calcular cigar length
+		unless (defined $_->[0] and defined $_->[1]) {
+			print STDERR $CCRLsubinfo, "Warnings: invalid cigar: $CCRLcigar\n";
+			return 0;
+		}
+		if ($_->[1] =~/^[MD=N]{1}$/) {
+			$CCRLcigar_cal_length+=$_->[0];
+		}
+	}
+	return $CCRLcigar_cal_length;
+}
 
 ### convert bam files into fastq
 ### Bam2FastQ ($bamin, $fastqout, map_code, MAPQ_code, [path_samtools])
