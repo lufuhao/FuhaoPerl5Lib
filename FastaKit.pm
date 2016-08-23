@@ -10,7 +10,25 @@ Fasta -related tools
 
 =head1 DESCRIPTION
 
-
+CdbFasta
+CdbYank
+CdbYankFromFile
+ExtractFastaSamtools
+ExtractFastaSamtoolsID
+IndexFasta
+CreateFastaRegion
+RunMira4
+CdHitEst
+RenameFasta
+RunFqTrinity
+SplitFastaByNumber
+RunCap3
+Fastq2Fasta
+SeqRevComp
+Codon2AA CountFasta
+CheckFastaIdDup
+RunEmbossStretcher
+AnalysisEmbossStretcherOutput
 
 =head1 FEEDBACK
 
@@ -45,12 +63,12 @@ use FuhaoPerl5Lib::FileKit qw/MoveFile RetrieveDir MergeFiles/;
 use FuhaoPerl5Lib::CmdKit;
 use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20151208';
+$VERSION     = '201600809';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup);
-%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup)],
-                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput);
+%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput)],
+                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -265,6 +283,48 @@ sub ExtractFastaSamtools {
 	}
 	return $FastaKit_success;
 }
+### Extract fasta sequences using a file containing a list of IDs, 1 ID perl line
+### &ExtractFastaSamtoolsID(my.fa, output.fa, "id1 id2", [path_samtools]);
+### Return: 0=fail; 1=success
+### Global:
+### Dependancy: &exec_cmd_return
+### Note: 
+sub ExtractFastaSamtoolsID {
+	my ($EFSinputfa, $EFSoutputfa, $EFSidlist, $EFSpath_samtools)=@_;
+	
+	my $EFSsubinfo='SUB(FastaKit::ExtractFastaSamtoolsID)';
+	$EFSpath_samtools='samtools' unless (defined $EFSpath_samtools);
+	
+	unless (defined $EFSinputfa and -s $EFSinputfa) {
+		print STDERR $EFSsubinfo, "Error: invalid input fasta file: $EFSinputfa\n";
+		return $FastaKit_failure;
+	}
+	unless (-s "$EFSinputfa.fai") {
+		unless (&IndexFasta($EFSinputfa, $EFSpath_samtools)) {
+			print STDERR $EFSsubinfo, "Error: unable to index fasta file: $EFSinputfa\n";
+			return $FastaKit_failure;
+		}
+	}
+	unless (defined $EFSidlist and $EFSidlist=~/\S+/) {
+		print STDERR $EFSsubinfo, "Error: invalid fasta ID list file: $EFSidlist\n";
+		return $FastaKit_failure;
+	}
+	unless (defined $EFSoutputfa and $EFSoutputfa=~/^\S+$/) {
+		print STDERR $EFSsubinfo, "Error: invalid output fasta file: $EFSoutputfa\n";
+		return $FastaKit_failure;
+	}
+	unlink $EFSoutputfa if (-e $EFSoutputfa);
+	
+	unless (&exec_cmd_return("$EFSpath_samtools faidx $EFSinputfa $EFSidlist > $EFSoutputfa")) {
+		print STDERR $EFSsubinfo, "Error: samtools extract fasta running error\n";
+		return $FastaKit_failure;
+	}
+	unless (-s $EFSoutputfa) {
+		print STDERR $EFSsubinfo, "Error: samtools extract fasta output error: $EFSoutputfa\n";
+		return $FastaKit_failure;
+	}
+	return $FastaKit_success;
+}
 
 
 
@@ -310,7 +370,7 @@ sub CdbYankFromFile {
 ### IndexFasta(input.fa, [path_samtools])
 ### Global:
 ### Dependency:
-### Note:
+### Note: return 1 for success; 0 for failure
 sub IndexFasta {
 	my ($IFfasta, $IFpath_samtools)=@_;
 	
@@ -912,7 +972,7 @@ sub SplitFastaByNumber {
 sub SeqRevComp {
 	my $SRCoriseq=shift;
 	my $SRCseq_rev=reverse $SRCoriseq;
-	$SRCseq_rev=~tr/actgACTG/tgacTGAC/;
+	$SRCseq_rev=~tr/ATGCUatgcuNnYyRrSsWwKkMmBbDdHhVv/TACGAtacgaNnRrYySsWwMmKkVvHhDdBb/;
 	return $SRCseq_rev;
 }
 
@@ -980,7 +1040,7 @@ sub codon2aa2 {
 sub CountFasta {
 	my ($CFinputfa, $CFcode)=@_;
 	
-	my $CFsubinfo="SUB(MiscKit::CountFasta)";
+	my $CFsubinfo="SUB(FastaKit::CountFasta)";
 	my %CFcodehash=(); ### For code dependency in future
 	my $CFnumseqs=0;
 	local *CFINPUTFASTA;
@@ -1023,7 +1083,7 @@ sub CountFasta {
 sub CheckFastaIdDup {
 	my $CFIDfasta=shift;
 	
-	my $CFIDsubinfo="SUB(MiscKit::CheckFastaIdDup)";
+	my $CFIDsubinfo="SUB(FastaKit::CheckFastaIdDup)";
 	my %CFIDfastaID=();
 	my $CFIDnum_duplicated_ID=0;
 	local *CFIDFASTA;
@@ -1072,6 +1132,224 @@ sub Codon6AL2aa {
 sub Codon6aa {
 	###
 }
+
+
+### Calculate the global identity of two sequences
+### RunGgsearch ($seq1, $seq2, $path_ggsearch)
+### Global:
+### Dependency:
+### Note: only two sequences
+### Return: (0/1, $identity)
+
+
+###GGEARCH
+sub RunGgsearch {
+	my ($RGfasta01, $RGfasta02, $RGpath_ggsearch)=@_;
+	
+	my $RGsubinfo="SUB(FastaKit::RunGgsearch)";
+	$RGpath_ggsearch = 'ggsearch' unless (defined $RGpath_ggsearch);
+	my $RGoutput = 'temp_lufuhao.out';
+	local *RGGGSEARCHOUT;
+	my $RGpc_id=-100;
+	
+	unlink $RGoutput if (defined $RGoutput and -e $RGoutput);
+	
+	unless (exec_cmd_return("$RGpath_ggsearch $RGfasta01 $RGfasta02 > $RGoutput")) {
+		print STDERR $RGsubinfo, "Error: ggsearch running failed\n";
+		return $FastaKit_failure;
+	}
+	unless (-s $RGoutput) {
+		print STDERR $RGsubinfo, "Error: ggsearch output failed\n";
+		return $FastaKit_failure;
+	}
+	close RGGGSEARCHOUT if (defined fileno(RGGGSEARCHOUT));
+	unless (open(RGGGSEARCHOUT," < $RGoutput")) {
+		print STDERR  $RGsubinfo, "ERROR: can not open ggsearch: $RGoutput\n";
+		return $FastaKit_failure;
+	}
+	while(my $RGline=<RGGGSEARCHOUT>) {
+		chomp $RGline;
+		if ($RGline =~ /\% identity/) {
+# eg. global/global (N-W) score: -158; 18.3% identity (45.9% similar) in 987 aa overlap (1-912:1-930)
+			my @RGtemp=split(/\s+/,$RGline);
+			if ($RGpc_id == -100) {# THERE MAY BE MULTIPLE ALIGNMENTS IN THE FILE, BUT WE WANT TO JUST TAKE THE TOP (BEST) ALIGNMENT
+				$RGpc_id=$RGtemp[4]; # 18.3%
+				if (substr($RGpc_id,length($RGpc_id)-1,1) eq '%') {
+					chop($RGpc_id);
+				}
+				else {
+					print STDERR $RGsubinfo, "ERROR: pc_id $RGpc_id\n";
+					return $FastaKit_failure;
+				}
+			}
+		}
+		elsif ($RGline =~ /!! No sequences with E\(\) < \d*/) {# THE SEQUENCES CAN'T BE ALIGNED USING ggsearch
+			$RGpc_id=0.0;
+		}
+	}
+	close RGGGSEARCHOUT;
+	
+	return ($FastaKit_success, $RGpc_id);
+}
+
+
+
+### run global alignment using EMBOSS stretcher for protein/DNA
+### RunEmbossStretcher ($seq1.fa, $seq2.fa, nucl/prot, $output, [$path_stretcher], [$additional_options])
+### Global:
+### Dependency: stretcher software in EMBOSS
+### Note: return 0=failed 1=success
+sub RunEmbossStretcher {
+	my ($RESseq1, $RESseq2, $REStype, $RESoutput, $RESpath_stretcer, $RESoptions)=@_;
+
+##Defaults
+	my $RESsubinfo='SUB(FastaKit::RunEmbossStretcher)';
+	$RESpath_stretcer='stretcher' unless (defined $RESpath_stretcer);
+	my ($RESdatafile, $RESgapopen, $RESgapextend, $RESs1type, $RESs2type);
+	my $REScmd='';
+	$RESoptions='' unless (defined $RESoptions);
+
+## Input and output
+	unless (defined $RESseq1 and -s $RESseq1) {
+		print STDERR $RESsubinfo, "Error: invalid seqfile 1\n";
+		return $FastaKit_failure;
+	}
+	unless (defined $RESseq2 and -s $RESseq2) {
+		print STDERR $RESsubinfo, "Error: invalid seqfile 2\n";
+		return $FastaKit_failure;
+	}
+	if (defined $REStype) {
+		if ($REStype=~/(^nucl$)/i) {
+			$RESdatafile='EDNAFULL';
+			$RESgapopen=16;
+			$RESgapextend=4;
+			$RESs1type=' -snucleotide1 ';
+			$RESs2type=' -snucleotide2 '
+		}
+		elsif ($REStype=~/(^prot$)/i) {
+			$RESdatafile='EBLOSUM62';
+			$RESgapopen=12;
+			$RESgapextend=2;
+			$RESs1type=' -sprotein1 ';
+			$RESs2type=' -sprotein2 '
+		}
+		else {
+			print STDERR $RESsubinfo, "Error: invalid sequence type, should be either 'nucl' or 'prot'\n";
+			return $FastaKit_failure;
+		}
+	}
+	else {
+		print STDERR $RESsubinfo, "Error: not defined sequence type, should be either 'nucl' or 'prot'\n";
+		return $FastaKit_failure;
+	}
+
+##Running 
+	$REScmd="$RESpath_stretcer -auto -asequence $RESseq1 -bsequence $RESseq2 -outfile $RESoutput -datafile $RESdatafile -gapopen $RESgapopen -gapextend $RESgapextend -aformat3 pair $RESs1type $RESs2type ";
+	unless (exec_cmd($REScmd)) {
+		print STDERR $RESsubinfo, "Error: running stretcher failed:\n$REScmd\n###\n";
+		return $FastaKit_failure;
+	}
+	unless (-s $RESoutput) {
+		print STDERR $RESsubinfo, "Error: stretcher output failed: $RESoutput\n";
+		return $FastaKit_failure;
+	}
+	return $FastaKit_success;
+}
+
+
+
+### get similarity from global alignment generated by EMBOSS stretcher for protein/DNA
+### AnalysisEmbossStretcherOutput ($seq1.fa, $seq2.fa, nucl/prot, $output, [$path_stretcher], [$additional_options])
+### Global:
+### Dependency:
+### Note: return (0=failed/1=success, $identity, $similarity, $gaps, $score)
+###	
+sub AnalysisEmbossStretcherOutput {
+	my $ARESOstretcher_output=shift;
+	
+	my $ARESOsubinfo='SUB(FastaKit::AnalysisEmbossStretcherOutput)';
+	my $ARESOidentity='NaN';
+	my $ARESOsimilarity='NaN';
+	my $ARESOgaps='NaN';
+	my $ARESOscore='NaN';
+	my $ARESOcheck_stretcher_format=0;
+	my $ARESOcheck_seq=0;
+	my $ARESOseq1='';
+	my $ARESOseq2='';
+	local *ARESOSTRECHEROUTPUT;
+	
+	unless (defined $ARESOstretcher_output and -s $ARESOstretcher_output) {
+		print STDERR $ARESOsubinfo, "Error: invalid EMBOSS output file\n";
+		return $FastaKit_failure;
+	}
+	close ARESOSTRECHEROUTPUT if (defined fileno(ARESOSTRECHEROUTPUT));
+	unless (open (ARESOSTRECHEROUTPUT, " < $ARESOstretcher_output")) {
+		print STDERR $ARESOsubinfo, "Error: unable to open EMBOSS output file\n";
+		return $FastaKit_failure;
+	}
+	while (my $ARESOline=<ARESOSTRECHEROUTPUT>) {
+		chomp $ARESOline;
+		if ($ARESOline=~/^#\s+Program:\s+stretcher$/) {
+			$ARESOcheck_stretcher_format=1;
+		}
+		next unless ($ARESOcheck_stretcher_format==1);
+		if ($ARESOline=~/^#\s+Aligned_sequences:\s+2$/) {
+			$ARESOcheck_seq=1;
+		}
+		next unless ($ARESOcheck_seq==1);
+		if ($ARESOline=~/^#\s+1:\s+(\S+)$/) {
+			if ($ARESOseq1 eq '') {
+				$ARESOseq1=$1;
+			}
+			else {
+				print STDERR $ARESOsubinfo, "Warnings: multiple seq1 values in EMBOSS output file, only keep the first one\n";
+			}
+		}
+		if ($ARESOline=~/^#\s+2:\s+(\S+)$/) {
+			if ($ARESOseq2 eq '') {
+				$ARESOseq2=$1;
+			}
+			else {
+				print STDERR $ARESOsubinfo, "Warnings: multiple seq2 values in EMBOSS output file, only keep the first one\n";
+			}
+		}
+		if ($ARESOline=~/^#\s+Identity:\s+(\d+\/\d+\s+\(\S+\%\))$/) {
+			if ($ARESOidentity eq 'NaN') {
+				$ARESOidentity=$1;
+			}
+			else {
+				print STDERR $ARESOsubinfo, "Warnings: multiple identity values in EMBOSS output file, only keep the first one\n";
+			}
+		}
+		if ($ARESOline=~/^#\s+Similarity:\s+(\d+\/\d+\s+\(\S+\%\))$/) {
+			if ($ARESOsimilarity eq 'NaN') {
+				$ARESOsimilarity=$1;
+			}
+			else {
+				print STDERR $ARESOsubinfo, "Warnings: multiple similarity values in EMBOSS output file, only keep the first one\n";
+			}
+		}
+		if ($ARESOline=~/^#\s+Gaps:\s+(\d+\/\d+\s+\(\S+\%\))$/) {
+			if ($ARESOgaps eq 'NaN') {
+				$ARESOgaps=$1;
+			}
+			else {
+				print STDERR $ARESOsubinfo, "Warnings: multiple gaps values in EMBOSS output file, only keep the first one\n";
+			}
+		}
+		if ($ARESOline=~/^#\s+Score:\s+(\S+)$/) {
+			if ($ARESOscore eq 'NaN') {
+				$ARESOscore=$1;
+			}
+			else {
+				print STDERR $ARESOsubinfo, "Warnings: multiple score values in EMBOSS output file, only keep the first one\n";
+			}
+		}
+	}
+	close ARESOSTRECHEROUTPUT;
+	return ($FastaKit_success, 	$ARESOidentity, $ARESOsimilarity, $ARESOgaps, $ARESOscore);
+}
+
 
 
 
