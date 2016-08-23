@@ -46,12 +46,12 @@ use warnings;
 use Exporter;
 use File::Copy;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20151106';
+$VERSION     = '20160805';
 @ISA         = qw(Exporter);
-@EXPORT      = qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath MoveFile CopyFile MergeFiles);
+@EXPORT      = qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath MoveFile CopyFile MergeFiles SubsetExtraction);
 @EXPORT_OK   = qw();
-%EXPORT_TAGS = ( DEFAULT => [qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath &MoveFile CopyFile MergeFiles)],
-                 ALL    => [qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath &MoveFile CopyFile MergeFiles)]);
+%EXPORT_TAGS = ( DEFAULT => [qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath &MoveFile CopyFile MergeFiles SubsetExtraction)],
+                 ALL    => [qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath &MoveFile CopyFile MergeFiles SubsetExtraction)]);
 
 
 my $FileKit_success=1;
@@ -244,7 +244,6 @@ sub CopyFile {
 ### MergeFiles
 ### Global: 
 ### Dependency: $FileKit_success;$FileKit_failure;
-
 ### Note:
 sub MergeFiles {
 	my $MFout=shift;
@@ -285,5 +284,78 @@ sub MergeFiles {
 		return $FileKit_failure;
 	}
 }
+
+
+
+### Extracta subset from a file if 1st colomn match ID file;
+### ID file: one ID/line; lines starting with # or having spaces will be ignored
+### SubsetExtraction($input, $ids, $output)
+### Global: 
+### Dependency: $FileKit_success; $FileKit_failure;
+### Note:
+sub SubsetExtraction {
+	my ($SEinput, $SEidfile, $SEoutput)=@_;
+
+	my $SEsubinfo='SUB(FileKit::SubsetExtraction)';
+	local *SEINPUT; local *SEIDFILE; local *SEOUTPUT;
+	my %SEidhash=();
+	my $SElinenum=0;
+	my $SEnumout=0;
+	
+	close SEIDFILE if (defined fileno(SEIDFILE));
+	unless (open (SEIDFILE, "< $SEidfile")) {
+		print STDERR $SEsubinfo, "Error: invalid ID file: $SEidfile\n";
+		return $FileKit_failure;
+	}
+	while (my $SEline=<SEIDFILE>) {
+		chomp $SEline;
+		$SElinenum++;
+		if ($SEline=~/^#/ or $SEline=~/\s+/) {
+			print $SEsubinfo, "Info: ignored line ($SElinenum): $SEline\n";
+			next;
+		}
+		$SEidhash{$SEline}++;
+	}
+	close SEIDFILE;
+	print $SEsubinfo, "### Info: read lines: $SElinenum\n";
+	print $SEsubinfo, "### Info: invalid ids: ", scalar(keys %SEidhash), "\n";
+
+
+	$SElinenum=0;
+
+	close SEINPUT if (defined fileno(SEINPUT));
+	close SEOUTPUT if (defined fileno(SEOUTPUT));
+	unless (open (SEINPUT, " < $SEinput")) {
+		print STDERR $SEsubinfo, "Error: invalid input file: $SEinput\n";
+		return $FileKit_failure;
+	}
+	unless (open (SEOUTPUT, " > $SEoutput")) {
+		print STDERR $SEsubinfo, "Error: can not write output file: $SEoutput\n";
+		return $FileKit_failure;
+	}
+	while (my $SEline=<SEINPUT>) {
+		chomp $SEline;
+		$SElinenum++;
+		if ($SEline=~/^#/) {
+			print $SEsubinfo, "Info: ignored line ($SElinenum): $SEline\n";
+			next;
+		}
+		my @SEarr=split(/\s+/, $SEline);
+#		print $SEsubinfo, "Test: this ID: $SEarr[0]\n"; ### For test ###
+		if (exists $SEidhash{$SEarr[0]}) {
+			print SEOUTPUT $SEline, "\n";
+			$SEnumout++;
+		}
+	}
+	close SEINPUT;
+	close SEOUTPUT;
+	
+	print $SEsubinfo, "### Info: reading input lines: $SElinenum\n";
+	print $SEsubinfo, "### Info: total output lines: $SEnumout\n";
+	
+	return $FileKit_success;
+}
+
+
 
 1;
