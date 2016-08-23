@@ -44,6 +44,7 @@ package FuhaoPerl5Lib::MiscKit;
 use strict;
 use warnings;
 use Exporter;
+use Data::Dumper qw /Dumper/;
 use Scalar::Util 'reftype';
 use Cwd;
 
@@ -51,9 +52,9 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20150603';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit);
-%EXPORT_TAGS = ( DEFAULT => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit)],
-                 ALL    => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit)]);
+@EXPORT_OK   = qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges);
+%EXPORT_TAGS = ( DEFAULT => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges)],
+                 ALL    => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges)]);
 
 
 my $MiscKit_success=1;
@@ -230,6 +231,67 @@ sub FullDigit {
 }
 
 
+
+### Mergeramge {2=>10, 9=>10} => {2=>15}
+### 
+
+sub MergeRanges {
+	my $MRrange=shift;
+	
+	my $MRsubinfo='SUB(MergeRanges)';
+	my %MRreturnhash=();
+	my $MRtest=0;
+	my ($MRlast_start, $MRlast_end);
+	
+	if (0) {### For test ###
+		print $MRsubinfo, "Test: input hash\n";
+		print Dumper $MRrange;
+		print "\n";
+	}
+	
+	foreach my $MRi (sort {$a<=>$b} keys %{$MRrange}) {
+		unless ($MRi=~/^\d+$/ and ${$MRrange}{$MRi}=~/^\d+$/ and $MRi<=${$MRrange}{$MRi}) {
+			print STDERR $MRsubinfo, "Warnings: unknown/invalid number pairs: $MRi => ${$MRrange}{$MRi}\n";
+			return $MiscKit_failure;
+		}
+		if ($MRtest==0) {
+			$MRlast_start=$MRi;
+			$MRlast_end=${$MRrange}{$MRi};
+			$MRtest++;
+			next;
+		}
+		if ($MRi>=$MRlast_start and $MRi<=$MRlast_end) {
+			if (${$MRrange}{$MRi}<=$MRlast_end) {
+#				next;
+			}
+			elsif (${$MRrange}{$MRi}>$MRlast_end) {
+				$MRlast_end=${$MRrange}{$MRi};
+#				next;
+			}
+			else {
+				print STDERR $MRsubinfo, "Warnings2: unknown/invalid number pairs: $MRi => ${$MRrange}{$MRi}\n";
+				return $MiscKit_failure;
+			}
+		}
+		elsif ($MRi> $MRlast_end) {
+			$MRreturnhash{$MRlast_start}=$MRlast_end;
+			if (0) {### For test ###
+				print $MRsubinfo, "Test: Add into hash: $MRlast_start => $MRlast_end\n";
+			}
+			$MRlast_start=$MRi;
+			$MRlast_end=${$MRrange}{$MRi};
+		}
+		if (0) {### For test ###
+			print $MRsubinfo, "Test: This: $MRi => ${$MRrange}{$MRi}\n";
+			print $MRsubinfo, "Last: This: $MRlast_start => $MRlast_end\n";
+		}
+	}
+	$MRreturnhash{$MRlast_start}=$MRlast_end;
+	return ($MiscKit_success, \%MRreturnhash);
+}
+
 #$MiscKit_success=1;$MiscKit_failure=0;
+
+
 
 1;
