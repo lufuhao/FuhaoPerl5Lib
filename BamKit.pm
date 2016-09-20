@@ -48,7 +48,7 @@ use FuhaoPerl5Lib::FileKit;
 use FuhaoPerl5Lib::MiscKit qw(IsReference);
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 
-$VERSION     = '20160613';
+$VERSION     = '20160919';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength);
@@ -512,7 +512,7 @@ sub VerifyCigarLength {
 ### Dependancy:
 ### Return the reference length of that alignment in BAM
 sub CalCigarRefLength {
-	my ($CCRLcigar)=shift;
+	my $CCRLcigar=shift;
 	
 	my $CCRLsubinfo='SUB(BamKit::CalCigarRefLength)';
 	
@@ -524,6 +524,30 @@ sub CalCigarRefLength {
 			return 0;
 		}
 		if ($_->[1] =~/^[MD=N]{1}$/) {
+			$CCRLcigar_cal_length+=$_->[0];
+		}
+	}
+	return $CCRLcigar_cal_length;
+}
+
+### calculate reference length based cigar
+### CalCigarReadLength (CIGAR)
+### Global: None
+### Dependancy:
+### Return the reference length of that alignment in BAM
+sub CalCigarReadLength {
+	my $CCRLcigar=shift;
+	
+	my $CCRLsubinfo='SUB(BamKit::CalCigarReadLength)';
+	
+	my $CCRLcigarOperations = &SplitCigar($CCRLcigar);
+	my $CCRLcigar_cal_length=0;
+	foreach (@{$CCRLcigarOperations}){#calcular cigar length
+		unless (defined $_->[0] and defined $_->[1]) {
+			print STDERR $CCRLsubinfo, "Warnings: invalid cigar: $CCRLcigar\n";
+			return 0;
+		}
+		if ($_->[1] =~/^[MIS=X]{1}$/) {
 			$CCRLcigar_cal_length+=$_->[0];
 		}
 	}
