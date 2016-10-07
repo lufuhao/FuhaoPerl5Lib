@@ -13,9 +13,10 @@ Fasta -related tools
 CdbFasta
 CdbYank
 CdbYankFromFile
+number_of_sequence=NumSeq($fasta)
 ExtractFastaSamtools
 ExtractFastaSamtoolsID
-IndexFasta
+0/1=IndexFasta(input.fa, [path_samtools])
 CreateFastaRegion
 RunMira4
 CdHitEst
@@ -66,9 +67,9 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '201600809';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput);
-%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput)],
-                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq);
+%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq)],
+                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -392,6 +393,41 @@ sub IndexFasta {
 		return $FastaKit_failure;
 	}
 	return $FastaKit_success;
+}
+
+
+
+### Count number sequences in fasta
+### NumSeq($fasta)
+### Global:
+### Dependency:
+### Note: 
+### Return number_of_sequence
+sub NumSeq {
+	my $NSseqfile=shift;
+
+	my $NSsubinfo='SUB(FastaKit::NumSeq)';
+	my $NSnumberseq=0;
+	local *NSSEQFILE;
+
+	unless (-s $NSseqfile) {
+		print STDERR $NSsubinfo, "Error: sequence file not existed: $NSseqfile\n";
+		return 0;
+	}
+
+	close NSSEQFILE if (defined fileno(NSSEQFILE));
+	unless (open (NSSEQFILE, "< $NSseqfile")) {
+		print STDERR $NSsubinfo, "Error: can not open sequence file: $NSseqfile\n";
+		return 0;
+	}
+	while (my $NSline=<NSSEQFILE>) {
+		chomp $NSline;
+		if ($NSline=~/^>\S+/) {
+			$NSnumberseq++;
+		}
+	}
+	close NSSEQFILE;
+	return $NSnumberseq;
 }
 
 
