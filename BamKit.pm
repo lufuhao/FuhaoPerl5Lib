@@ -51,9 +51,9 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20160919';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength);
-%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength)],
-                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength)]);
+@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames);
+%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames)],
+                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames)]);
 
 
 
@@ -1000,6 +1000,142 @@ sub ReadSam {
 		##do sth
 	}
 }
+
+
+
+### BamFilterReadsByNames
+### &BamFilterReadsByNames($inputbam, $file_readnems, $code, $outbam[, $path_samtools])
+### Global: $BamKit_success; $BamKit_failure;
+### Dependancy:
+### Note: $file_readnems: per readname perl line
+### Note: $code: 1=filter / 0=filter_out
+sub BamFilterReadsByNames {
+	my ($BFRBNbamin, $BFRBNreadnames, $BFRBNfiltercode, $BFRBNbamout, $BFRBNpath_samtools)=@_;
+	
+	my $BFRBNsubinfo='SUB(BamKit::BamFilterReadsByNames)';
+	$BFRBNpath_samtools='samtools' unless (defined $BFRBNpath_samtools);
+	my %BFRBNreadnamehash=();
+	my $BFRBNlinenum=0;
+	my $BFRBNinclude=0;
+	my $BFRBNexclude=0;
+	my $BFRBNheader=0;
+	local *BFRBNINPUTBAM; local *BFRBNREADNAMEFILE; local *BFRBNOUTPUTBAM;
+	
+	unless (defined $BFRBNbamin and -s $BFRBNbamin) {
+		print STDERR $BFRBNsubinfo, "Error: invalid input BAM/SAM file\n";
+		return $BamKit_failure;
+	}
+	unless ($BFRBNbamin=~/\.[bs]am$/i) {
+		print STDERR $BFRBNsubinfo, "Error: input BAM/SAM extension error, should be .sam or .bam [case-insensitive]\n";
+		return $BamKit_failure;
+	}
+	unless (defined $BFRBNreadnames and -s $BFRBNreadnames) {
+		print STDERR $BFRBNsubinfo, "Error: invalid input read name file [per readname per line]\n";
+		return $BamKit_failure;
+	}
+	unless (defined $BFRBNfiltercode and $BFRBNfiltercode==0 or $BFRBNfiltercode==1) {
+		print STDERR $BFRBNsubinfo, "Error: invalid filter_code, should be 0 or 1\n";
+		return $BamKit_failure;
+	}
+	unless (defined $BFRBNbamout and $BFRBNbamout=~/^\S+$/i) {
+		print STDERR $BFRBNsubinfo, "Error: invalid output BAM/SAM file\n";
+		return $BamKit_failure;
+	}
+	unless ($BFRBNbamout=~/\.[bs]am$/i) {
+		print STDERR $BFRBNsubinfo, "Error: output BAM/SAM extension error, should be .sam or .bam [case-insensitive]\n";
+		return $BamKit_failure;
+	}
+	
+	close BFRBNREADNAMEFILE if (defined fileno(BFRBNREADNAMEFILE));
+	unless (open (BFRBNREADNAMEFILE, " < $BFRBNreadnames")) {
+		print STDERR $BFRBNsubinfo, "Error: can not open readname file: $BFRBNreadnames\n";
+		return $BamKit_failure;
+	}
+	while (my $BFRBNline=<BFRBNREADNAMEFILE>) {
+		chomp $BFRBNline;
+		$BFRBNreadnamehash{$BFRBNline}++;
+	}
+	close BFRBNREADNAMEFILE;
+	close BFRBNINPUTBAM if (defined fileno(BFRBNINPUTBAM));
+	if ($BFRBNbamin=~/\.bam/i) {
+		unless (open (BFRBNINPUTBAM, "$BFRBNpath_samtools view -h $BFRBNbamin | ")) {
+			print STDERR $BFRBNsubinfo, "Error: can not open BAM input: $BFRBNbamin\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BFRBNbamin=~/\.sam/i) {
+		unless (open (BFRBNINPUTBAM, "$BFRBNpath_samtools view -S -h $BFRBNbamin | ")) {
+			print STDERR $BFRBNsubinfo, "Error: can not open SAM input: $BFRBNbamin\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BFRBNsubinfo, "Error: invalid input BAM/SAM extension: $BFRBNbamin\n";
+		return $BamKit_failure;
+	}
+	close BFRBNOUTPUTBAM if (defined fileno(BFRBNOUTPUTBAM));
+	if ($BFRBNbamout=~/\.bam/i) {
+		unless (open (BFRBNOUTPUTBAM, " | $BFRBNpath_samtools view -S -b -h - > $BFRBNbamout")) {
+			print STDERR $BFRBNsubinfo, "Error: can not write BAM input: $BFRBNbamout\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BFRBNbamout=~/\.sam/i) {
+		unless (open (BFRBNOUTPUTBAM, " | $BFRBNpath_samtools view -S -h - > $BFRBNbamout")) {
+			print STDERR $BFRBNsubinfo, "Error: can not write SAM input: $BFRBNbamout\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BFRBNsubinfo, "Error: invalid output BAM/SAM extension: $BFRBNbamout\n";
+		return $BamKit_failure;
+	}
+	while (my $BFRBNline=<BFRBNINPUTBAM>) {
+		chomp $BFRBNline;
+		$BFRBNlinenum++;
+		if ($BFRBNline=~/^\@/) {
+			print BFRBNOUTPUTBAM $BFRBNline, "\n";
+			$BFRBNheader++;
+			next;
+		}
+		my @BFRBNarr=split(/\t/, $BFRBNline);
+		if (defined $BFRBNarr[0] and $BFRBNarr[0]=~/^\S+$/) {
+			if (exists $BFRBNreadnamehash{$BFRBNarr[0]}) {
+				if ($BFRBNfiltercode==1) {
+					print BFRBNOUTPUTBAM $BFRBNline, "\n";
+					$BFRBNinclude++;
+				}
+				else {
+					$BFRBNexclude++;
+				}
+			}
+			else {
+				if ($BFRBNfiltercode==0) {
+					print BFRBNOUTPUTBAM $BFRBNline, "\n";
+					$BFRBNinclude++;
+				}
+				else {
+					$BFRBNexclude++;
+				}
+			}
+		}
+		else {
+			print STDERR $BFRBNsubinfo, "Wanings: invalid line($BFRBNlinenum): $BFRBNline\n";
+		}
+	}
+	close BFRBNINPUTBAM;
+	close BFRBNOUTPUTBAM;
+	
+	print $BFRBNsubinfo, "\n\n\n###SUMMARY: \n";
+	print $BFRBNsubinfo, "BAM/SAM input:      $BFRBNbamin\n";
+	print $BFRBNsubinfo, "Total lines:        $BFRBNlinenum\n";
+	print $BFRBNsubinfo, "    header:         $BFRBNheader\n";
+	print $BFRBNsubinfo, "    filtered:       $BFRBNinclude\n";
+	print $BFRBNsubinfo, "    filtered out:   $BFRBNexclude\n";
+
+	return $BamKit_success;
+}
+
 
 
 1;
