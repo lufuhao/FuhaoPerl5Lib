@@ -8,19 +8,33 @@ FuhaoPerl5Lib::CmdKit
 
 Execuate cmd and return
 
+=head1 Requirements
+
+Perl Modules:
+        File::Which;
+
 =head1 DESCRIPTION
 
-&CurrentTime
-Require: localtime (Linux)
-Output: YYYYMMDD HHMMSS
+=over 4
 
-&exec_cmd ( cmd )
-Require: time
-Output: 1=success, die if fail
+=item CurrentTime()
 
-&exec_cmd_return ( cmd )
-Require: time
-Output: 1=success, die if fail
+	* Return time: YYYYMMDD HHMMSS
+
+=item exec_cmd ("$cmd")
+
+    * Return: 1=Success    0=Failure
+
+=item exec_cmd_return ("$cmd")
+
+    * Return: 1=Success    0=Failure
+
+=item CanRun("$cmd")
+    * Test a external cmd exists in PATH
+    * Dependency: File::Which
+    * Return: 1=Success    0=Failure
+
+=back
 
 =head1 FEEDBACK
 
@@ -52,12 +66,12 @@ use warnings;
 use Exporter;
 use File::Which;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20150603';
+$VERSION     = '20161103';
 @ISA         = qw(Exporter);
 @EXPORT      = qw(CurrentTime exec_cmd exec_cmd_return CanRun);
 @EXPORT_OK   = qw();
 %EXPORT_TAGS = ( DEFAULT => [qw(CurrentTime exec_cmd exec_cmd_return  CanRun)],
-                 ALL    => [qw(CurrentTime exec_cmd exec_cmd_return CurrentTime CanRun)]);
+                 ALL    => [qw(CurrentTime exec_cmd exec_cmd_return CanRun)]);
 
 my $CmdKit_success=1;
 my $CmdKit_failure=0;
@@ -137,23 +151,25 @@ sub exec_cmd_return {
 
 
 ### Test a external cmd exists in PATH
+### CanRun("$cmd")
 ### Global: 
 ### Dependency: File::Which;
+### Note: 
 sub CanRun {
 	my $CRcmd=shift;
 	
-	my $CRsubinfo='SUB(MiscKit::CanRun)';
+	my $CRsubinfo='SUB(CmdKit::CanRun)';
 	my $CRpath=which ("$CRcmd");
-	
-	if (-s $CRpath and -x $CRpath) {
-		return $CmdKit_success;
-	}
-	else {
+
+	unless (-s $CRpath and -x $CRpath) {
 		print STDERR "Error: cmd $CRcmd not exists\n";
 		return $CmdKit_failure;
 	}
+
+	return $CmdKit_success;
 }
 
 
 
 1;
+__END__
