@@ -8,9 +8,100 @@ FuhaoPerl5Lib::BamKit
 
 use samtools to index, extract, merge, rehead BAM files
 
+=head1 Requirements
+
+Perl Modules:
+        Cwd;
+        Bio::DB::Sam;
+        FuhaoPerl5Lib::CmdKit;
+        FuhaoPerl5Lib::FileKit;
+        FuhaoPerl5Lib::MiscKit;
+
 =head1 DESCRIPTION
 
-use samtools to index, extract, merge, rehead BAM files
+=over 2
+
+=item Bam2FastQ ($bamin, $fastqout, map_code, MAPQ_code, [path_samtools])
+
+    * Convert bam files into fastq
+    * Map_code: 0=all    1=mapped_only    2=unmapped_only
+    * MAPQ_code: any alignment less than MAPQ would be ignored
+    * Return: 1=Sucesss    0=Failure
+
+=item Bam2FastqProg($BAM, $fastq_prefix, $path_bam2fastq)
+
+    * Convert BAM to FASTQ using bam2fastq program (https://github.com/jts/bam2fastq)
+    * Return (1/0, \%hash=('R1' => $fastqR1, 'R2' => $fastqR2, 'M' => $fastqUnpaired)
+
+=item BamExtractReadsUsingBed($inputbam, $file_region, $outreadname[, $path_samtools])
+
+    * Extract reads in a BAM file using specified region
+    * $file_region: region file format: 
+            seq_ID\tstart\tend
+            seqID
+            seqID:Num1-Num2
+    * Note: bed format is half open, start is less 1 than real start
+    * Return: 1=Sucesss    0=Failure
+
+=item BamFilterReadsByNames($inputbam, $file_readnames, $filter_code, $outbam[, $path_samtools])
+
+    * Filter BAM reads by a file of read name list
+    * $file_readnames: per readname per line
+    * $filter_code: 1=filter    0=filter_out
+    * Return: 1=Sucesss    0=Failure
+
+=item CalCigarRefLength (CIGAR)
+
+    * Calculate reference length based cigar
+    * Return the reference length of that BAM alignment
+
+
+=item CalCigarReadLength (CIGAR)
+
+    * Calculate read length based cigar
+    * Return the read length of that BAM alignment
+
+=item CalcFPKM(BAMin, $total_mapped_reads, readgroup aware(0/1), [$CFpath_samtools])
+
+=item ExpressFpkm($EFref, $EFfrag_len_mean, $EFfrag_len_stddev, $EFmax_read_len, \@EFsamfiles, \@seq_ids, [path_express])
+
+    * For special
+
+=item ExtactBam($input.bam, $seqid_string, $out.bam, [$samtools_path])
+
+    * Return: 1=Sucesss    0=Failure
+
+=item IndexBam($baminput, $path_samtools)
+
+    * Return: 1=Sucesss    0=Failure
+
+=item ReadSam($file.sam,$ref,fa, ReturnCode(1/2/3))
+
+    * Dependancy: Bio::DB::Sam
+    * ReturnCode: 1=Bio::DB::Sam objective; 2=reference name array, 3=to be defined
+    * Return: (0/1, $CodeAssigned)
+
+=item SamCleanHeader($input.bam, $out.bam, [out.noRG.bam], [\@seqids], [path2samtools])
+
+    * Return: 1=Sucesss    0=Failure
+    * [\@seqids] could be a reference to a constant or array
+    * [\@seqids] could be a string delimited by space or comma
+
+=item SortBam($input.bam, $out.bam, [$samtools_path], [$samtools_sort_options])
+
+    * 1=Sucesss    0=Failure
+    * samtools_sort_options: -n, -l Num, -@ Num
+
+=item SplitCigar(SamCigar)
+
+    * Return: double array ((2, M), (5, D), ....)
+
+=item VerifyCigarLength ($CIGAR, $READLENGTH)
+
+    * Verify Cigar length == readlength
+    * Return: 1=equal    0=NOTequal
+
+=back
 
 =head1 FEEDBACK
 
@@ -48,12 +139,12 @@ use FuhaoPerl5Lib::FileKit;
 use FuhaoPerl5Lib::MiscKit qw(IsReference);
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 
-$VERSION     = '20161026';
+$VERSION     = '20161103';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames);
-%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames)],
-                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames)]);
+@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed);
+%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed)],
+                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed)]);
 
 
 
@@ -63,8 +154,8 @@ my $BamKit_debug=0;
 
 
 ### samtools index sorted BAM
-### IndexBam(input.bam)
-### Global: 
+### IndexBam($baminput, $path_samtools)
+### Global: $BamKit_success; $BamKit_failure;
 ### Dependency: &exec_cmd_return 
 ### Note:
 sub IndexBam {
@@ -74,17 +165,17 @@ sub IndexBam {
 	$IBpath_samtools='samtools' unless (defined $IBpath_samtools);
 	
 	unless (defined $IBbamin and -s $IBbamin) {
-		print STDERR "${CFsubinfo}Error: invalid BAM input\n";
+		print STDERR $CFsubinfo, "Error: invalid BAM input\n";
 		return $BamKit_failure;
 	}
 	unlink "$IBbamin.bai" if (-e "$IBbamin.bai");
 	
 	if (! &exec_cmd_return("$IBpath_samtools index $IBbamin")) {
-		print STDERR "${CFsubinfo}Error: SAMtools index running error\n";
+		print STDERR $CFsubinfo, "Error: SAMtools index running error\n";
 		return $BamKit_failure;
 	}
 	elsif (! -s "$IBbamin.bai") {
-		print STDERR "${CFsubinfo}Error: SAMtools index output error\n";
+		print STDERR $CFsubinfo, "Error: SAMtools index output error\n";
 		return $BamKit_failure;
 	}
 	return $BamKit_success;
@@ -93,7 +184,7 @@ sub IndexBam {
 
 
 ### Extract subsets from BAM
-### &ExtactBam(input.bam, sequence, out.bam, [samtools_path])
+### &ExtactBam($input.bam, $seqid_string, $out.bam, [$samtools_path])
 ### Global:
 ### Dependency: &exec_cmd_return
 ### Note:
@@ -102,21 +193,22 @@ sub ExtractBam {
 	
 	my $EBsubinfo='SUB(BamKit::ExtractBam)';
 	$EBpath_samtools='samtools' unless (defined $EBpath_samtools);
+	my $EBcmd="";
 	
 	unless (defined $EBbamin and -s $EBbamin) {
-		print STDERR "${EBsubinfo}Error: invalid BAM input\n";
+		print STDERR $EBsubinfo, "Error: invalid BAM input\n";
 		return $BamKit_failure;
 	}
 	unless (defined $EBseqids and $EBseqids !~/^\s*$/) {
-		print STDERR "${EBsubinfo}Error: invalid seqids\n";
+		print STDERR $EBsubinfo, "Error: invalid seqids\n";
 		return $BamKit_failure;
 	}
 	unless (defined $EBbamout) {
-		print STDERR "${EBsubinfo}Error: invalid BAM output\n";
+		print STDERR $EBsubinfo, "Error: invalid BAM output\n";
 		return $BamKit_failure;
 	}
+	unlink $EBbamout if (-e $EBbamout);
 	
-	my $EBcmd="";
 	if ($EBbamin=~/\.sam$/i) {
 		$EBcmd="$EBpath_samtools view -b -h -S ";
 	}
@@ -124,17 +216,17 @@ sub ExtractBam {
 		$EBcmd="$EBpath_samtools view -b -h ";
 	}
 	else {
-		print STDERR "${EBsubinfo}Error: unknown input BAM/SAM extension \n";
+		print STDERR $EBsubinfo, "Error: unknown input BAM/SAM extension \n";
 		return $BamKit_failure;
 	}
-	if (! -s "$EBbamin.bai") {
-		if (! &LuIndexBam($EBbamin)) {
-			print STDERR "${EBsubinfo}Error: can not Index BAM: $EBbamin\n";
+	unless (-s "$EBbamin.bai") {
+		unless (&IndexBam($EBbamin)) {
+			print STDERR $EBsubinfo, "Error: can not Index BAM: $EBbamin\n";
 			return $BamKit_failure;
 		}
 	}
 	if (! &exec_cmd_return("$EBcmd $EBbamin $EBseqids > $EBbamout")) {
-		print STDERR "${EBsubinfo}Error: BAM extract failed\n";
+		print STDERR $EBsubinfo, "Error: BAM extract failed\n";
 		return $BamKit_failure;
 	}
 	else {
@@ -145,8 +237,8 @@ sub ExtractBam {
 
 
 ### Sort bams
-### &SortBam(input.bam, out.bam, [samtools_path], [samtools_oprions])
-### Global:
+### &SortBam($input.bam, $out.bam, [$samtools_path], [$samtools_sort_options])
+### Global: $BamKit_failure;
 ### Dependency: &exec_cmd_return
 ### Note:
 sub SortBam {
@@ -156,13 +248,14 @@ sub SortBam {
 	$SBpath_samtools='samtools' unless (defined $SBpath_samtools);
 	$SBsamtools_options=' ' unless (defined $SBsamtools_options);
 	(my $SBbamout_prefix=$SBbamout)=~s/\.bam$//i;
+	my $SBcmd='';
 	
 	unless (defined $SBbamin and -s $SBbamin) {
-		print STDERR "${SBsubinfo}Error: invalid BAM input\n";
+		print STDERR $SBsubinfo, "Error: invalid BAM input\n";
 		return $BamKit_failure;
 	}
-	if (! defined $SBbamout or $SBbamout=~/^\s*$/) {
-		print STDERR "${SBsubinfo}Error: invalid BAM output\n";
+	unless (defined $SBbamout and $SBbamout=~/^\S+$/) {
+		print STDERR $SBsubinfo, "Error: invalid BAM output\n";
 		return $BamKit_failure;
 	}
 	else {
@@ -170,25 +263,24 @@ sub SortBam {
 		unlink "$SBbamout.bai" if (-e "$SBbamout.bai");
 	}
 	
-	my $SBcmd="";
 	if ($SBbamin=~/\.sam$/i) {
-		$SBcmd="$SBpath_samtools view -b -h -S $SBbamin | $SBpath_samtools $SBsamtools_options - $SBbamout_prefix";
+		$SBcmd="$SBpath_samtools view -b -h -S $SBbamin | $SBpath_samtools sort $SBsamtools_options - $SBbamout_prefix";
 	}
 	elsif ($SBbamin=~/\.bam$/i) {
 		$SBcmd="$SBpath_samtools sort $SBsamtools_options $SBbamin $SBbamout_prefix";
 	}
 	else {
-		print STDERR "${SBsubinfo}Error: unknown input BAM/SAM extension \n";
+		print STDERR ${SBsubinfo}, "Error: unknown input BAM/SAM extension \n";
 		return $BamKit_failure;
 	}
-#	if (! -s "$SBbamin.bai") {
+#	if (! -s "$SBbamin.bai") { ### Index BAM
 #		if (! &IndexBam($SBbamin)) {
 #			print STDERR "${SBsubinfo}Error: can not Index BAM: $SBbamin\n";
 #			return $BamKit_failure;
 #		}
 #	}
-	if (! &exec_cmd_return("$SBcmd")) {
-		print STDERR "${SBsubinfo}Error: BAM sort failed\n";
+	unless (exec_cmd_return("$SBcmd")) {
+		print STDERR $SBsubinfo, "Error: BAM sort failed\n";
 		return $BamKit_failure;
 	}
 	return $BamKit_success;
@@ -290,13 +382,13 @@ sub ExtractBam_old {
 
 
 ### Clean those sequences in header but not exist in alignments
-###&SamCleanHeader(input.bam, out.bam, [out.noRG.bam], [\@seqids], [path2samtools])
-###Global: 
-###Dependency: 
-###Note: 
+### SamCleanHeader($input.bam, $out.bam, [out.noRG.bam], [\@seqids], [path2samtools])
+### Global: 
+### Dependency: 
+### Note: 
 sub SamCleanHeader {
 	my ($SCHbam_input, $SCHbam_withrg, $SCHbam_norg, $SCHseq_obj, $SCHpathsamtools)=@_;
-	
+
 	local *SCHBAMINPUT1; local *SCHBAMINPUT2; local *SCHBAMOUTPUT;
 	my $SCHsubinfo='SUB(BamKit::SamCleanHeader)';
 	my $SCHnew_readgroup=0;
@@ -307,7 +399,7 @@ sub SamCleanHeader {
 	my $SCHgetseqids_from_bam=1;
 
 	unless (defined $SCHbam_input and -s $SCHbam_input) {
-		print STDERR "${SCHsubinfo}Error: BAM input file not found\n";
+		print STDERR $SCHsubinfo, "Error: BAM input file not found\n";
 		return $BamKit_failure;
 	}
 	unless (defined $SCHbam_withrg and $SCHbam_withrg ne '' and $SCHbam_withrg !~ m/\s+/) {
@@ -332,14 +424,14 @@ sub SamCleanHeader {
 				@SCHids=@{$SCHseq_obj;};
 			}
 			else {
-				print STDERR "${SCHsubinfo}Error: unknown seqids reference type\n";
+				print STDERR $SCHsubinfo, "Error: unknown seqids reference type\n";
 				return $BamKit_failure;
 			}
 		}
 		elsif ($SCHtest_id_reference==0) {
 			@SCHids=split(/\s+|,/, $SCHseq_obj);
 		}
-		undef $SCHseq_obj;
+#		undef $SCHseq_obj;
 		foreach (@SCHids){
 			if (/^\S+$/) {
 				$SCHseqID{$_}++;
@@ -348,23 +440,22 @@ sub SamCleanHeader {
 		}
 	}
 
-
 ##COMMENT: read bam/sam
 	close SCHBAMINPUT1 if (defined fileno(SCHBAMINPUT1));
 	if ($SCHbam_input=~/\.sam$/i) {
 		unless (open (SCHBAMINPUT1, "$SCHpathsamtools view -S $SCHbam_input|")) {
-			print STDERR "${SCHsubinfo}Error: sam open error\n";
+			print STDERR $SCHsubinfo, "Error: sam open error\n";
 			return $BamKit_failure;
 		}
 	}
 	elsif ($SCHbam_input=~/\.bam$/i) {
 		unless (open (SCHBAMINPUT1, "$SCHpathsamtools view $SCHbam_input|")) {
-			print STDERR "${SCHsubinfo}Error: bam open error\n";
+			print STDERR $SCHsubinfo, "Error: bam open error\n";
 			return $BamKit_failure;
 		}
 	}
 	else {
-		print STDERR "${SCHsubinfo}Error: unknown BAM format\n";
+		print STDERR $SCHsubinfo, "Error: unknown BAM format\n";
 		return $BamKit_failure;
 	}
 	
@@ -380,32 +471,32 @@ sub SamCleanHeader {
 		}
 	}
 	close SCHBAMINPUT1;
-	print STDERR "${SCHsubinfo}Info: total of ".scalar(keys %SCHseqID)." REF sequences detected\n" if ($BamKit_debug);
-	print STDERR "${SCHsubinfo}Info: total of ".scalar(keys %SCHreahgroup)." readgroups detected\n" if ($BamKit_debug);
+	print STDERR $SCHsubinfo, "Info: total of ".scalar(keys %SCHseqID)." REF sequences detected\n" if ($BamKit_debug);
+	print STDERR $SCHsubinfo, "Info: total of ".scalar(keys %SCHreahgroup)." readgroups detected\n" if ($BamKit_debug);
 	unless (scalar(keys %SCHseqID)>=1) {### For BAMs without alignments ###
-		print STDERR "${SCHsubinfo}Error: no alignments\n";
+		print STDERR $SCHsubinfo, "Error: no alignments\n";
 		return 2;
 	}
 ##COMMENT: write output
 	if ($SCHbam_input=~/\.sam$/i) {
 		unless (open (SCHBAMINPUT2, "$SCHpathsamtools view -h -S $SCHbam_input|")) {
-			print STDERR "${SCHsubinfo}Error: sam open error\n";
+			print STDERR $SCHsubinfo, "Error: sam open error\n";
 			return $BamKit_failure;
 		}
 	}
 	elsif ($SCHbam_input=~/\.bam$/i) {
 		unless (open (SCHBAMINPUT2, "$SCHpathsamtools view -h $SCHbam_input|")) {
-			print STDERR "${SCHsubinfo}Error: bam open error\n";
+			print STDERR $SCHsubinfo, "Error: bam open error\n";
 			return $BamKit_failure;
 		}
 	}
 	unless (open (SCHBAMOUTPUT, "| $SCHpathsamtools view -bS - > $SCHbam_withrg")) {
-		print STDERR "${SCHsubinfo}Error: bam write error\n";
+		print STDERR $SCHsubinfo, "Error: bam write error\n";
 		return $BamKit_failure;
 	}
 	if ($SCHtest_norg==1) {
 		unless (open (SCHBAMOUTNOGROUP, "| $SCHpathsamtools view -bS - > $SCHbam_norg")) {
-			print STDERR "${SCHsubinfo}Error: bam2 write error\n";
+			print STDERR $SCHsubinfo, "Error: bam2 write error\n";
 			return $BamKit_failure;
 		}
 	}
@@ -415,7 +506,7 @@ sub SamCleanHeader {
 ##COMMENT: clean header
 			if ($SCHline=~m/^\@SQ\s+SN:(\S+)\s+LN:\d+/) {
 				if (! exists $SCHseqID{$1}) {
-					print STDERR "${SCHsubinfo}Info: ignore $SCHline\n" if ($BamKit_debug);
+					print STDERR $SCHsubinfo, "Info: ignore $SCHline\n" if ($BamKit_debug);
 					next;
 				}
 				print SCHBAMOUTPUT $SCHline;
@@ -452,14 +543,15 @@ sub SamCleanHeader {
 	close SCHBAMOUTPUT;
 	close SCHBAMINPUT2;
 	close SCHBAMOUTNOGROUP if (defined $SCHbam_norg);
+	
 	return $BamKit_success;
 }
 
 
 
 ### split cigar into double array ((2, M), (5, D), ....)
-### &SplitCigar(SamCigar)
-### Global: None
+### SplitCigar(SamCigar)
+### Global:
 ### Dependancy:
 ### Note:
 sub SplitCigar {
@@ -530,11 +622,13 @@ sub CalCigarRefLength {
 	return $CCRLcigar_cal_length;
 }
 
-### calculate reference length based cigar
+
+
+### calculate read length based cigar
 ### CalCigarReadLength (CIGAR)
 ### Global: None
 ### Dependancy:
-### Return the reference length of that alignment in BAM
+### Return the read length of that BAM alignment
 sub CalCigarReadLength {
 	my $CCRLcigar=shift;
 	
@@ -553,6 +647,8 @@ sub CalCigarReadLength {
 	}
 	return $CCRLcigar_cal_length;
 }
+
+
 
 ### convert bam files into fastq
 ### Bam2FastQ ($bamin, $fastqout, map_code, MAPQ_code, [path_samtools])
@@ -646,13 +742,13 @@ sub Bam2FastQ {
 
 
 ### convert BAM to FASTQ using bam2fastq program
-### Bam2FastqProg(BAM, additional_amd, path_bam2fastq)
+### Bam2FastqProg($BAM, $fastq_prefix, $path_bam2fastq)
 ### Global: $BamKit_success $BamKit_failure
 ### Dependency: 
 ### Note:
 ### Return (1/0, \%hash=('R1' => $fastqR1, 'R2' => $fastqR2, 'M' => $fastqUnpaired)
 sub Bam2FastqProg {
-	my ($BFPbamfile, $BFPprefix, $BFPadd_cmd, $BFPpath_bam2fastq)=@_;
+	my ($BFPbamfile, $BFPprefix, $BFPpath_bam2fastq)=@_;
 	
 	my $BFPsubinfo='SUB(Bam2FastqProg)';
 	$BFPpath_bam2fastq='bam2fastq' unless (defined $BFPpath_bam2fastq);
@@ -700,10 +796,10 @@ sub Bam2FastqProg {
 
 
 
-###ExpressRPKM
-###&ExpressFpkm($EFref, $EFfrag_len_mean, $EFfrag_len_stddev, $EFmax_read_len, \@EFsamfiles, \@seq_ids, [path_express])
-###Global: $BamKit_debug
-###Dependancy: &exec_cmd_return, FileKit::RetrieveBasename, FileKit::DeletePath
+### Express RPKM
+### ExpressFpkm($EFref, $EFfrag_len_mean, $EFfrag_len_stddev, $EFmax_read_len, \@EFsamfiles, \@seq_ids, [path_express])
+### Global: $BamKit_debug
+### Dependancy: exec_cmd_return, FileKit::RetrieveBasename, FileKit::DeletePath
 ### Note: bamfiles should be the intact to get the total number of reads
 sub ExpressFpkm {
 	my ($EFref, $EFfrag_len_mean, $EFfrag_len_stddev, $EFmax_read_len, $EFsamfiles_index, $EFcluster_seqids_arrindex, $EFpath_express)=@_;
@@ -812,7 +908,7 @@ sub ExpressFpkm {
 
 
 ### Calculate FPKM
-### &CalcFPKM(BAMin, $total_mapped_reads, readgroup aware(0/1), [$CFpath_samtools])
+### CalcFPKM(BAMin, $total_mapped_reads, readgroup aware(0/1), [$CFpath_samtools])
 ### Global: 
 ### Dependency:
 ### Note:
@@ -998,13 +1094,14 @@ sub ReadSam {
 	}
 	elsif ($RSret_code==3) {
 		##do sth
+		return $BamKit_failure;
 	}
 }
 
 
 
-### BamFilterReadsByNames
-### &BamFilterReadsByNames($inputbam, $file_readnems, $code, $outbam[, $path_samtools])
+### Filter Bam Reads By Names
+### &BamFilterReadsByNames($inputbam, $file_readnames, $filter_code, $outbam[, $path_samtools])
 ### Global: $BamKit_success; $BamKit_failure;
 ### Dependancy:
 ### Note: $file_readnems: per readname perl line
@@ -1138,4 +1235,119 @@ sub BamFilterReadsByNames {
 
 
 
+### Extract reads in a BAM file using specified region in BED format
+### &BamExtractReadsUsingBed($inputbam, $file_region, $outreadname[, $path_samtools])
+### Global: $BamKit_success; $BamKit_failure;
+### Dependancy:
+### Note: region file format: 
+###		seq_ID\tstart\tend
+###		seqID
+###		seqID:Num1-Num2
+### Note: $code: 1=filter / 0=filter_out
+sub BamExtractReadsUsingBed {
+	my ($BERUBbamin, $BERUBbedfiles, $BERUBreadnameout, $BERUBpath_samtools)=@_;
+	
+	my $BERUBsubinfo='SUB(BamKit::BamExtractReadsUsingBed)';
+	$BERUBpath_samtools='samtools' unless (defined $BERUBpath_samtools);
+	my $BERUBlinenum1=0;
+	my $BERUBlinenum2=0;
+	my %BERUBreadnamehash=();
+	my $BERUBoutnum=0;
+	local *BERUBREGIONFILE; local *BERUBALIGNMENT; local *BERUBREADNAMEOUT;
+	
+	unless (defined $BERUBbamin and -s $BERUBbamin) {
+		print STDERR $BERUBsubinfo, "Error: invalid input BAM\n";
+		return $BamKit_failure;
+	}
+	unless (-s "$BERUBbamin.bai") {
+		print $BERUBsubinfo, "Info: BAM not indexed: $BERUBbamin\n";
+		print $BERUBsubinfo, "Info: Now trying to index\n";
+		unless (&IndexBam($BERUBbamin, $BERUBpath_samtools)) {
+			print STDERR $BERUBsubinfo, "Error: unable to index BAM: $BERUBbamin\n";
+			return $BamKit_failure;
+		}
+	}
+	unless (defined $BERUBbedfiles and -s $BERUBbedfiles) {
+		print STDERR $BERUBsubinfo, "Error: invalid bed files\n";
+		return $BamKit_failure;
+	}
+	unless (defined $BERUBreadnameout) {
+		print STDERR $BERUBsubinfo, "Error: invalid readname output file name\n";
+		return $BamKit_failure;
+	}
+	unlink $BERUBreadnameout if (-e $BERUBreadnameout);
+	
+	
+	print $BERUBsubinfo, "############# SUMMARY ####################\n";
+	print $BERUBsubinfo, "###   Input    BAM:    $BERUBbamin\n";
+	print $BERUBsubinfo, "###   Input    REGION: $BERUBbedfiles\n";
+	print $BERUBsubinfo, "###   Output   READs:  $BERUBreadnameout\n";
+	print $BERUBsubinfo, "###   SAMTOOLS path:   $BERUBpath_samtools\n";
+	
+	close BERUBREGIONFILE if (defined fileno(BERUBREGIONFILE));
+	unless (open (BERUBREGIONFILE, "< $BERUBbedfiles")) {
+		print STDERR $BERUBsubinfo, "Error: unable to open region file\n";
+		return $BamKit_failure;
+	}
+	close BERUBREADNAMEOUT if (defined fileno(BERUBREADNAMEOUT));
+	unless (open (BERUBREADNAMEOUT, " > $BERUBreadnameout ")) {
+		print STDERR $BERUBsubinfo, "Error: unable to write region name file: $BERUBreadnameout\n";
+		return $BamKit_failure;
+	}
+	while (my $BERUBline=<BERUBREGIONFILE>) {
+		chomp $BERUBline;
+		$BERUBlinenum1++;
+		my $BERUBregion;
+		if ($BERUBline=~/^(\S+)\t(\d+)\t(\d+)/) {### Bed format first number is half open
+			$BERUBregion=$1.':'.($2+1).'-'.$3;
+		}
+		elsif ($BERUBline=~/^(\S+):(\d+)-(\d+)$/) {
+			$BERUBregion=$1.':'.$2.'-'.$3;
+		}
+		elsif ($BERUBline=~/^(\S+)$/) {
+			$BERUBregion=$1;
+		}
+		else {
+			print STDERR $BERUBsubinfo, "Error: unable to understand region line: BED $BERUBbedfiles line($BERUBlinenum1) $BERUBline\n";
+			return $BamKit_failure;
+		}
+		close BERUBALIGNMENT if (defined fileno(BERUBALIGNMENT));
+#		print $BERUBsubinfo, "Test: $BERUBpath_samtools view $BERUBbamin $BERUBregion\n"; ### For test ###
+		unless (open (BERUBALIGNMENT, "$BERUBpath_samtools view $BERUBbamin $BERUBregion | ")) {
+			print STDERR $BERUBsubinfo, "Error: unable to open BAM $BERUBbamin REGION $BERUBregion using cmd: $BERUBpath_samtools view $BERUBbamin $BERUBregion\n";
+			return $BamKit_failure;
+		}
+		$BERUBlinenum2=0;
+		while (my $BERUBline2=<BERUBALIGNMENT>) {
+			chomp $BERUBline2;
+			if ($BERUBline2=~/^(\S+)\t/) {
+				$BERUBlinenum2++;
+				unless (exists $BERUBreadnamehash{$1}) {
+					print BERUBREADNAMEOUT $1, "\n";
+					$BERUBoutnum++;
+				}
+				$BERUBreadnamehash{$1}++;
+			}
+			else {
+				print STDERR $BERUBsubinfo, "Warnings: unable to know readname: BED $BERUBbedfiles line($BERUBlinenum1) $BERUBline BAM $BERUBbamin REGION $BERUBregion line($BERUBlinenum2) $BERUBline2\n";
+			}
+		}
+		close BERUBALIGNMENT;
+		if ($BERUBlinenum2==0) {
+			print STDERR $BERUBsubinfo, "Warnings: no alignments: BED $BERUBbedfiles line($BERUBlinenum1) $BERUBline BAM $BERUBbamin REGION $BERUBregion\n";
+		}
+		
+	}
+	close BERUBREGIONFILE;
+	close BERUBREADNAMEOUT;
+	
+	print $BERUBsubinfo, "###   Output   READs lines:  $BERUBoutnum\n";
+	print $BERUBsubinfo, "###   Output   READs hashes: ", scalar(keys %BERUBreadnamehash), "\n";
+	
+	return $BamKit_success;
+}
+
+
+
 1;
+__END__
