@@ -6,15 +6,37 @@ FuhaoPerl5Lib::AlignKit
 
 =head1 SYNOPSIS
 
-File operations
+Alignment operations
 
 =head1 Requirements
+
+Perl Modules:
+
+    FuhaoPerl5Lib::BamKit qw/IndexBam/;
 
 
 
 =head1 DESCRIPTION
 
+=over 4
 
+=item Bowtie2Index(reference.fasta, index_name, [$pathbowtie2build])
+
+    * Run bowtie2-build to index reference sequences
+    * Dependency: &exec_cmd_return
+    * Note:
+    * Return: 1=Success    0=Failure
+
+=item Bowtie2p($index, R1.fq, R2.fq, $out.bam, $BPoptions_bowtie2p, $BPpath_bowtie2p, $BPpath_samtools)
+
+    * Run bowtie2 and map read to reference, sort and index
+    * Dependency: FuhaoPerl5Lib::BamKit=IndexBam
+    * $BPoptions_bowtie2p default : 
+                    -q --phred33 --threads 1 --maxins 800 \
+                    --rg-id MySample1 --rg \"SM:My\" --rg \"PL:ILLUMINA\" --rg \"LB:Sample\"
+    * Return: 1=Success    0=Failure
+
+=back
 
 =head1 FEEDBACK
 
@@ -40,20 +62,21 @@ Fight against Bioinformatics with Perl ^_^
 =cut
 
 #Coding starts
+
 package FuhaoPerl5Lib::AlignKit;
+
 use strict;
 use warnings;
-#use FuhaoPerl5Lib::CmdKit;
-#use FuhaoPerl5Lib::FileKit;
+use FuhaoPerl5Lib::BamKit qw/IndexBam/;
 use Exporter;
 use Cwd;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20150617';
+$VERSION     = '20161103';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw();
-%EXPORT_TAGS = ( DEFAULT => [qw()],
-                 ALL    => [qw()]);
+@EXPORT_OK   = qw(Bowtie2Index Bowtie2p);
+%EXPORT_TAGS = ( DEFAULT => [qw(Bowtie2Index Bowtie2p)],
+                 ALL    => [qw(Bowtie2Index Bowtie2p)]);
 
 
 my $AlignKit_success=1;
@@ -62,68 +85,97 @@ my $AlignKit_debug=0; #checge to 1 if debug
 
 
 ### run bowtie2-build to index reference sequences
-### RunBowtie2Index(reference.fasta, index_name)
-### Global: $pathbowtie2build
+### RunBowtie2Index(reference.fasta, index_name, [$pathbowtie2build])
+### Global: $AlignKit_success=1; $AlignKit_failure=0;
 ### Dependency: &exec_cmd_return
 ### Note:
-sub RunBowtie2Index {
-	my ($RBIreference, $RBIindex)=@_;
-	unless (defined $RBIreference and $RBIreference ne '' and -s $RBIreference) {
-		print STDERR "SUB(RunBowtie2Index)Error: invalid fasta file for bowtie2-build\n";
-		return 1;
+sub Bowtie2Index {
+	my ($BIreference, $BIindex, $BIpath_bowtie2build)=@_;
+
+	my $BIsubinfo='SUB(AlignKit::RunBowtie2Index)';
+	$BIpath_bowtie2build='bowtie2-build' unless (defined $BIpath_bowtie2build);
+
+
+	unless (defined $BIreference and $BIreference ne '' and -s $BIreference) {
+		print STDERR $BIsubinfo, "Error: invalid fasta file for bowtie2-build\n";
+		return $AlignKit_failure;
 	}
-	unless (defined $RBIindex and $RBIindex ne '') {
-		print STDERR "SUB(RunBowtie2Index)Error: invalid index name for bowtie2-build\n";
-		return 1;
+	unless (defined $BIindex and $BIindex ne '') {
+		print STDERR $BIsubinfo, "Error: invalid index name for bowtie2-build\n";
+		return $AlignKit_failure;
 	}
+
 ##clean existing index
-	unlink "$RBIindex.1.bt2" if (-e "$RBIindex.1.bt2");
-	unlink "$RBIindex.2.bt2" if (-e "$RBIindex.2.bt2");
-	unlink "$RBIindex.3.bt2" if (-e "$RBIindex.3.bt2");
-	unlink "$RBIindex.4.bt2" if (-e "$RBIindex.4.bt2");
-	unlink "$RBIindex.rev.1.bt2" if (-e "$RBIindex.rev.1.bt2");
-	unlink "$RBIindex.rev.2.bt2" if (-e "$RBIindex.rev.2.bt2");
+	unlink "$BIindex.1.bt2" if (-e "$BIindex.1.bt2");
+	unlink "$BIindex.2.bt2" if (-e "$BIindex.2.bt2");
+	unlink "$BIindex.3.bt2" if (-e "$BIindex.3.bt2");
+	unlink "$BIindex.4.bt2" if (-e "$BIindex.4.bt2");
+	unlink "$BIindex.rev.1.bt2" if (-e "$BIindex.rev.1.bt2");
+	unlink "$BIindex.rev.2.bt2" if (-e "$BIindex.rev.2.bt2");
+
 ## run bowtie2-build
-	if (! &exec_cmd_return("$pathbowtie2build -f $RBIreference $RBIindex")) {
-		print STDERR "SUB(RunBowtie2Index)Error: bowtie2-build running error\n";
-		return 1;
+	if (! &exec_cmd_return("$BIpath_bowtie2build -f $BIreference $BIindex")) {
+		print STDERR $BIsubinfo, "Error: bowtie2-build running error\n";
+		return $AlignKit_failure;
 	}
-	elsif (! -s "$RBIindex.1.bt2" or ! -s "$RBIindex.2.bt2" or ! -s "$RBIindex.3.bt2" or ! -s "$RBIindex.4.bt2" or ! -s "$RBIindex.rev.1.bt2" or ! -s "$RBIindex.rev.2.bt2") {
-		print STDERR "SUB(RunBowtie2Index)Error: bowtie2-build output error\n";
-		return 1;
+	elsif (! -s "$BIindex.1.bt2" or ! -s "$BIindex.2.bt2" or ! -s "$BIindex.3.bt2" or ! -s "$BIindex.4.bt2" or ! -s "$BIindex.rev.1.bt2" or ! -s "$BIindex.rev.2.bt2") {
+		print STDERR $BIsubinfo, "Error: bowtie2-build output error\n";
+		return $AlignKit_failure;
 	}
-	return 0;
+
+	return $AlignKit_success;
 }
+
 
 
 ### Run bowtie2 and map read to reference, and index
-### RunBowtie2p(reference, fq)
-### Global: $pathbowtie2p, $fq_qual_score, $numthreads
-### Dependency: 
-### Note: $fq_qual_score='phred33'; $maxinsert=800
-sub RunBowtie2p {
-	my ($RBPindex, $RBPreadgroup, $RBPrep, $RBPfq_pair1, $RBPfq_pair2, $RBPbamout)=@_;
-	unless (defined $RBPfq_pair1 and -s $RBPfq_pair1 and defined $RBPfq_pair2 and -s $RBPfq_pair2) {
-		print STDERR "SUB(RunBowtie2p)Error: invalid bowtie2 R1 and R2\n";
-		return 1;
+### Bowtie2p($index, R1.fq, R2.fq, $out.bam, $BPoptions_bowtie2p, $BPpath_bowtie2p, $BPpath_samtools)
+### Global: $AlignKit_success=1; $AlignKit_failure=0;
+### Dependency: FuhaoPerl5Lib::BamKit=IndexBam
+### Note:
+sub Bowtie2p {
+	my ($BPindex, $BPfq_pair1, $BPfq_pair2, $BPbamout, $BPoptions_bowtie2p, $BPpath_bowtie2p, $BPpath_samtools)=@_;
+
+### Default
+	my $BPsubinfo='SUB(AlignKit::Bowtie2p)';
+	$BPpath_bowtie2p='bowtie2' unless (defined $BPpath_bowtie2p);
+	$BPoptions_bowtie2p=' -q --phred33 --threads 1 --maxins 800 --rg-id MySample1 --rg \"SM:My\" --rg \"PL:ILLUMINA\" --rg \"LB:Sample\" ';
+	$BPpath_samtools='samtools' unless (defined $BPpath_samtools);
+
+### Check input and output
+	unless (defined $BPfq_pair1 and -s $BPfq_pair1) {
+		print STDERR $BPsubinfo, "Error: invalid R1 fastq for bowtie2\n";
+		return $AlignKit_failure;
 	}
-	(my $RBPbamout_base=$RBPbamout)=~s/\.\w+$//;
-#Par${tissue}${RBPrep}_rep${RBPrep}.vs.$bt2index.sort
-	unlink $RBPbamout if (-e $RBPbamout_base);
-	unlink "$RBPbamout.bai" if (-e "$RBPbamout_base.bai");
-	if (! &exec_cmd_return("$pathbowtie2p -q --$fq_qual_score --threads $numthreads --maxins $maxinsert --rg-id Par${RBPreadgroup}${RBPrep} --rg \"SM:Par${RBPreadgroup}\" --rg 'PL:ILLUMINA' --rg \"LB:Par${RBPreadgroup}\" -x $RunDir/4.mapping/$RBPindex -1 $RBPfq_pair1 -2 $RBPfq_pair2 | $path_samtools view -b -h -S - | $path_samtools sort - $RBPbamout_base" )) {
-		print STDERR "SUB(RunBowtie2p)Error: bowtie2 running error\n";
-		return 1;
+	unless (defined $BPfq_pair2 and -s $BPfq_pair2) {
+		print STDERR $BPsubinfo, "Error: invalid R2 fastq for bowtie2\n";
+		return $AlignKit_failure;
 	}
-	elsif (! -s "Par${RBPreadgroup}${RBPrep}_rep${RBPrep}.vs.$RBPindex.sort.bam") {
-		print STDERR "SUB(RunBowtie2p)Error: bowtie2 output error\n";
-		return 1;
+	(my $BPbamout_base=$BPbamout)=~s/\.\w+$//;
+	unlink $BPbamout if (-e $BPbamout_base);
+	unlink "$BPbamout.bai" if (-e "$BPbamout_base.bai");
+
+### Running bowtie and sort
+	if (! &exec_cmd_return("$BPpath_bowtie2p $BPoptions_bowtie2p -x $BPindex -1 $BPfq_pair1 -2 $BPfq_pair2 | $BPpath_samtools view -b -h -S - | $BPpath_samtools sort - $BPbamout_base" )) {
+		print STDERR $BPsubinfo, "Error: bowtie2 running error\n";
+		return $AlignKit_failure;
 	}
-	if (! &IndexBam("Par${RBPreadgroup}${RBPrep}_rep${RBPrep}.vs.$RBPindex.sort.bam")) {
-		print STDERR "SUB(RunBowtie2p)Error: BAM index error\n";
-		return 1;
+	elsif (! -s "$BPbamout_base.bam") {
+		print STDERR $BPsubinfo, "Error: bowtie2 output error\n";
+		return $AlignKit_failure;
 	}
-	return 0;
+
+### Index BAM
+	unless (&IndexBam("$BPbamout_base.bam")) {
+		print STDERR $BPsubinfo, "Error: BAM index error: \n";
+		return $AlignKit_failure;
+	}
+	
+	return $AlignKit_success;
 }
 
+
+
+
 1;
+__END__
