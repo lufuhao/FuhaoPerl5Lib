@@ -50,6 +50,11 @@ Perl Modules:
     * $filter_code: 1=filter    0=filter_out
     * Return: 1=Sucesss    0=Failure
 
+=item BamKeepBothMates ($input.R1.bam, $input.R2.bam, $output.R1.bam, $output.R2.bam, [path_samtools])
+
+    * Keep alignments that have both mates mapped
+    * Return: 1=Success    0=Failure
+
 =item CalCigarRefLength (CIGAR)
 
     * Calculate reference length based cigar
@@ -74,6 +79,11 @@ Perl Modules:
 =item IndexBam($baminput, $path_samtools)
 
     * Return: 1=Sucesss    0=Failure
+
+=item BamMarkPairs ($input.R1.bam, $input.R2.bam, $output.R1.bam, $output.R2.bam, [path_samtools])
+
+    * Mark separately mapped FLAG to R1 67 R2 131
+    * Return: 1=Success    0=Failure
 
 =item ReadSam($file.sam,$ref,fa, ReturnCode(1/2/3))
 
@@ -142,9 +152,9 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20161103';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed);
-%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed)],
-                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed)]);
+@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs );
+%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs )],
+                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs )]);
 
 
 
@@ -1154,13 +1164,13 @@ sub BamFilterReadsByNames {
 	}
 	close BFRBNREADNAMEFILE;
 	close BFRBNINPUTBAM if (defined fileno(BFRBNINPUTBAM));
-	if ($BFRBNbamin=~/\.bam/i) {
+	if ($BFRBNbamin=~/\.bam$/i) {
 		unless (open (BFRBNINPUTBAM, "$BFRBNpath_samtools view -h $BFRBNbamin | ")) {
 			print STDERR $BFRBNsubinfo, "Error: can not open BAM input: $BFRBNbamin\n";
 			return $BamKit_failure;
 		}
 	}
-	elsif ($BFRBNbamin=~/\.sam/i) {
+	elsif ($BFRBNbamin=~/\.sam$/i) {
 		unless (open (BFRBNINPUTBAM, "$BFRBNpath_samtools view -S -h $BFRBNbamin | ")) {
 			print STDERR $BFRBNsubinfo, "Error: can not open SAM input: $BFRBNbamin\n";
 			return $BamKit_failure;
@@ -1171,13 +1181,13 @@ sub BamFilterReadsByNames {
 		return $BamKit_failure;
 	}
 	close BFRBNOUTPUTBAM if (defined fileno(BFRBNOUTPUTBAM));
-	if ($BFRBNbamout=~/\.bam/i) {
+	if ($BFRBNbamout=~/\.bam$/i) {
 		unless (open (BFRBNOUTPUTBAM, " | $BFRBNpath_samtools view -S -b -h - > $BFRBNbamout")) {
 			print STDERR $BFRBNsubinfo, "Error: can not write BAM input: $BFRBNbamout\n";
 			return $BamKit_failure;
 		}
 	}
-	elsif ($BFRBNbamout=~/\.sam/i) {
+	elsif ($BFRBNbamout=~/\.sam$/i) {
 		unless (open (BFRBNOUTPUTBAM, " | $BFRBNpath_samtools view -S -h - > $BFRBNbamout")) {
 			print STDERR $BFRBNsubinfo, "Error: can not write SAM input: $BFRBNbamout\n";
 			return $BamKit_failure;
@@ -1243,7 +1253,7 @@ sub BamFilterReadsByNames {
 ###		seq_ID\tstart\tend
 ###		seqID
 ###		seqID:Num1-Num2
-### Note: $code: 1=filter / 0=filter_out
+### Note:
 sub BamExtractReadsUsingBed {
 	my ($BERUBbamin, $BERUBbedfiles, $BERUBreadnameout, $BERUBpath_samtools)=@_;
 	
@@ -1333,10 +1343,7 @@ sub BamExtractReadsUsingBed {
 			}
 		}
 		close BERUBALIGNMENT;
-		if ($BERUBlinenum2==0) {
-			print STDERR $BERUBsubinfo, "Warnings: no alignments: BED $BERUBbedfiles line($BERUBlinenum1) $BERUBline BAM $BERUBbamin REGION $BERUBregion\n";
-		}
-		
+#		if ($BERUBlinenum2==0) {print STDERR $BERUBsubinfo, "Warnings: no alignments: BED $BERUBbedfiles line($BERUBlinenum1) $BERUBline BAM $BERUBbamin REGION $BERUBregion\n";}### For debug
 	}
 	close BERUBREGIONFILE;
 	close BERUBREADNAMEOUT;
@@ -1349,5 +1356,395 @@ sub BamExtractReadsUsingBed {
 
 
 
+### Keep alignments that have both mates mapped
+### BamKeepBothMates ($input.R1.bam, $input.R2.bam, $output.R1.bam, $output.R2.bam, [path_samtools])
+### Global: $BamKit_success; $BamKit_failure;
+### Dependency:
+### Note:
+### Return: 1=Success    0=Failure
+sub BamKeepBothMates {
+	my ($BKBMbamin1, $BKBMbamin2, $BKBMbamout1, $BKBMbamout2, $BKBMpath_samtools)=@_;
+
+#Default
+	my $BKBMsubinfo='SUB(BamKit::BamKeepBothMates)';
+	$BKBMpath_samtools = 'samtools' unless (defined $BKBMpath_samtools);
+	my %BKBMreadhash=();
+	my $BKBMnumkeep=0;
+	my $BKBMnumtotal=0;
+	my $BKBMnumsingle=0;
+	local *BKBMBAMIN1; local *BKBMBAMIN2;
+	local *BKBMBAMOUT1; local *BKBMBAMOUT2; 
+
+#Input and Output
+	unless (defined $BKBMbamin1 and -s $BKBMbamin1) {
+		print STDERR $BKBMsubinfo, "Error: invalid input R1 BAM\n";
+		return $BamKit_failure;
+	}
+	unless (defined $BKBMbamin2 and -s $BKBMbamin2) {
+		print STDERR $BKBMsubinfo, "Error: invalid input R2 BAM\n";
+		return $BamKit_failure;
+	}
+	unless (defined $BKBMbamout1 and $BKBMbamout1=~/^\S+$/) {
+		print STDERR $BKBMsubinfo, "Error: invalid output R1 BAM\n";
+		return $BamKit_failure;
+	}
+	unlink $BKBMbamout1 if (-e $BKBMbamout1);
+	unless (defined $BKBMbamout2 and $BKBMbamout2=~/^\S+$/) {
+		print STDERR $BKBMsubinfo, "Error: invalid output R2 BAM\n";
+		return $BamKit_failure;
+	}
+	unlink $BKBMbamout2 if (-e $BKBMbamout2);
+	
+	print "\n", $BKBMsubinfo, "########### SUMMARY 1 ###############\n";
+	print $BKBMsubinfo, " InPut:  input R1 BAM:     $BKBMbamin1\n";
+	print $BKBMsubinfo, "         input R2 BAM:     $BKBMbamin2\n";
+	print $BKBMsubinfo, " Output: output R1 BAM:    $BKBMbamout1\n";
+	print $BKBMsubinfo, "         output R2 BAM:    $BKBMbamout2\n\n";
+	
+	close BKBMBAMIN1 if (defined fileno(BKBMBAMIN1));
+	if ($BKBMbamin1=~/\.bam$/i) {
+		unless (open (BKBMBAMIN1, "$BKBMpath_samtools view $BKBMbamin1 | ")) {
+			print STDERR $BKBMsubinfo, "Error: can NOT open input R1 BAM: $BKBMbamin1\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BKBMbamin1=~/\.sam$/i) {
+		unless (open (BKBMBAMIN1, "$BKBMpath_samtools view -S $BKBMbamin1 | ")) {
+			print STDERR $BKBMsubinfo, "Error: can NOT open input R1 SAM: $BKBMbamin1\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BKBMsubinfo, "Error: can NOT open input R1 SAM/BAM: $BKBMbamin1\n";
+		return $BamKit_failure;
+	}
+	while (my $BKBMline=<BKBMBAMIN1>) {
+		chomp $BKBMline;
+		next if ($BKBMline=~/^\@/);
+		my @BKBMarr=split(/\t/, $BKBMline);
+		unless ($BKBMarr[1] & 0x0004) {
+			$BKBMreadhash{$BKBMarr[0]}{1}++;
+		}
+	}
+	close BKBMBAMIN1;
+	
+	close BKBMBAMIN2 if (defined fileno(BKBMBAMIN2));
+	if ($BKBMbamin2=~/\.bam$/i) {
+		unless (open (BKBMBAMIN2, "$BKBMpath_samtools view $BKBMbamin2 | ")) {
+			print STDERR $BKBMsubinfo, "Error: can NOT open input R2 BAM: $BKBMbamin2\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BKBMbamin2=~/\.sam$/i) {
+		unless (open (BKBMBAMIN2, "$BKBMpath_samtools view -S $BKBMbamin2 | ")) {
+			print STDERR $BKBMsubinfo, "Error: can NOT open input R2 SAM: $BKBMbamin2\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BKBMsubinfo, "Error: can NOT open input R2 SAM/BAM: $BKBMbamin2\n";
+		return $BamKit_failure;
+	}
+	while (my $BKBMline=<BKBMBAMIN2>) {
+		chomp $BKBMline;
+		next if ($BKBMline=~/^\@/);
+		my @BKBMarr=split(/\t/, $BKBMline);
+		unless ($BKBMarr[1] & 0x0004) {
+			$BKBMreadhash{$BKBMarr[0]}{2}++;
+		}
+	}
+	close BKBMBAMIN2;
+
+#Mark both mapped mates
+	foreach my $BKBMread (keys %BKBMreadhash) {
+		$BKBMnumtotal++;
+		if (exists $BKBMreadhash{$BKBMread}{1} and $BKBMreadhash{$BKBMread}{1}>0 and exists $BKBMreadhash{$BKBMread}{2} and $BKBMreadhash{$BKBMread}{2}>0) {
+			$BKBMreadhash{$BKBMread}{'keep'}++;
+			$BKBMnumkeep++;
+		}
+		else {
+			$BKBMnumsingle++;
+		}
+	}
+	print "\n", $BKBMsubinfo, "########### SUMMARY 2 ###############\n";
+	print $BKBMsubinfo, " Total number of reads:     $BKBMnumtotal\n";
+	print $BKBMsubinfo, " Number to keep:            $BKBMnumkeep\n";
+	print $BKBMsubinfo, " Number to exclude:         $BKBMnumsingle\n\n";
+
+#Filter R1
+	close BKBMBAMIN1 if (defined fileno(BKBMBAMIN1));
+	if ($BKBMbamin1=~/\.bam$/i) {
+		unless (open (BKBMBAMIN1, "$BKBMpath_samtools view -h $BKBMbamin1 | ")) {
+			print STDERR $BKBMsubinfo, "Error: can NOT open input R1 BAM: $BKBMbamin1\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BKBMbamin1=~/\.sam$/i) {
+		unless (open (BKBMBAMIN1, "$BKBMpath_samtools view -S -h $BKBMbamin1 | ")) {
+			print STDERR $BKBMsubinfo, "Error: can NOT open input R1 SAM: $BKBMbamin1\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BKBMsubinfo, "Error: can NOT open input R1 SAM/BAM\n";
+		return $BamKit_failure;
+	}
+	close BKBMBAMOUT1 if (defined fileno(BKBMBAMOUT1));
+	if ($BKBMbamout1=~/\.bam/i) {
+		unless (open (BKBMBAMOUT1, " | $BKBMpath_samtools view -S -h -b - > $BKBMbamout1")) {
+			print STDERR $BKBMsubinfo, "Error: can NOT write output R1 BAM: $BKBMbamout1\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BKBMbamout1=~/\.sam/i) {
+		unless (open (BKBMBAMOUT1, " | $BKBMpath_samtools view -S -h - > $BKBMbamout1")) {
+			print STDERR $BKBMsubinfo, "Error: can NOT write output R1 SAM: $BKBMbamout1\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BKBMsubinfo, "Error: can NOT write output R1 SAM/BAM\n";
+		return $BamKit_failure;
+	}
+	while (my $BKBMline=<BKBMBAMIN1>) {
+		chomp $BKBMline;
+		if ($BKBMline=~/^\@/) {
+			print BKBMBAMOUT1 $BKBMline, "\n";
+			next;
+		}
+		else{
+			my @BKBMarr=split(/\t/, $BKBMline);
+			if (exists $BKBMreadhash{$BKBMarr[0]} and exists $BKBMreadhash{$BKBMarr[0]}{'keep'} and $BKBMreadhash{$BKBMarr[0]}{'keep'}>0) {
+				print BKBMBAMOUT1 $BKBMline, "\n";
+			}
+		}
+	}
+	close BKBMBAMIN1;
+	close BKBMBAMOUT1;
+	unless (-s $BKBMbamout1) {
+		print STDERR $BKBMsubinfo, "Error: output R1 SAM/BAMerror: $BKBMbamout1\n";
+		return $BamKit_failure;
+	}
+#Filter R2
+	close BKBMBAMIN2 if (defined fileno(BKBMBAMIN2));
+	if ($BKBMbamin2=~/\.bam$/i) {
+		unless (open (BKBMBAMIN2, "$BKBMpath_samtools view -h $BKBMbamin2 | ")) {
+			print STDERR $BKBMsubinfo, "Error: can NOT open input R2 BAM: $BKBMbamin2\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BKBMbamin2=~/\.sam$/i) {
+		unless (open (BKBMBAMIN2, "$BKBMpath_samtools view -S -h $BKBMbamin2 | ")) {
+			print STDERR $BKBMsubinfo, "Error: can NOT open input R2 SAM: $BKBMbamin2\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BKBMsubinfo, "Error: can NOT open input R2 SAM/BAM: $BKBMbamin2\n";
+		return $BamKit_failure;
+	}
+	close BKBMBAMOUT2 if (defined fileno(BKBMBAMOUT2));
+	if ($BKBMbamout2=~/\.bam/i) {
+		unless (open (BKBMBAMOUT2, " | $BKBMpath_samtools view -S -h -b - > $BKBMbamout2")) {
+			print STDERR $BKBMsubinfo, "Error: can NOT write output R2 BAM: $BKBMbamout2\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BKBMbamout2=~/\.sam/i) {
+		unless (open (BKBMBAMOUT2, " | $BKBMpath_samtools view -S -h - > $BKBMbamout2")) {
+			print STDERR $BKBMsubinfo, "Error: can NOT write output R2 SAM: $BKBMbamout2\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BKBMsubinfo, "Error: can NOT write output R2 SAM/BAM\n";
+		return $BamKit_failure;
+	}
+	while (my $BKBMline=<BKBMBAMIN2>) {
+		chomp $BKBMline;
+		if ($BKBMline=~/^\@/) {
+			print BKBMBAMOUT2 $BKBMline, "\n";
+			next;
+		}
+		else {
+			my @BKBMarr=split(/\t/, $BKBMline);
+			if (exists $BKBMreadhash{$BKBMarr[0]} and exists $BKBMreadhash{$BKBMarr[0]}{'keep'} and $BKBMreadhash{$BKBMarr[0]}{'keep'}>0) {
+				print BKBMBAMOUT2 $BKBMline, "\n";
+			}
+		}
+	}
+	close BKBMBAMIN2;
+	close BKBMBAMOUT2;
+	unless (-s $BKBMbamout2) {
+		print STDERR $BKBMsubinfo, "Error: output R2 SAM/BAMerror: $BKBMbamout2\n";
+		return $BamKit_failure;
+	}
+	
+	return $BamKit_success;
+}
+
+
+
+
+
+### Mark separately mapped FLAG to 67 131
+### BamMarkPairs ($input.R1.bam, $input.R2.bam, $output.R1.bam, $output.R2.bam, [path_samtools])
+### Global: $BamKit_success; $BamKit_failure;
+### Dependency:
+### Note:
+### Return: 1=Success    0=Failure
+sub BamMarkPairs {
+	my ($BMPbamin1, $BMPbamin2, $BMPbamout1, $BMPbamout2, $BMPpath_samtools)=@_;
+#Default
+	my $BMPsubinfo='SUB(BamKit::BamMarkPairs)';
+	$BMPpath_samtools = 'samtools' unless (defined $BMPpath_samtools);
+	local *BMPBAMIN1; local *BMPBAMIN2;
+	local *BMPBAMOUT1; local *BMPBAMOUT2; 
+
+#Input and Output
+	unless (defined $BMPbamin1 and -s $BMPbamin1) {
+		print STDERR $BMPsubinfo, "Error: invalid input R1 BAM\n";
+		return $BamKit_failure;
+	}
+	unless (defined $BMPbamin2 and -s $BMPbamin2) {
+		print STDERR $BMPsubinfo, "Error: invalid input R2 BAM\n";
+		return $BamKit_failure;
+	}
+	unless (defined $BMPbamout1 and $BMPbamout1=~/^\S+$/) {
+		print STDERR $BMPsubinfo, "Error: invalid output R1 BAM\n";
+		return $BamKit_failure;
+	}
+	unlink $BMPbamout1 if (-e $BMPbamout1);
+	unless (defined $BMPbamout2 and $BMPbamout2=~/^\S+$/) {
+		print STDERR $BMPsubinfo, "Error: invalid output R2 BAM\n";
+		return $BamKit_failure;
+	}
+	unlink $BMPbamout2 if (-e $BMPbamout2);
+	
+	print "\n", $BMPsubinfo, "########### SUMMARY 1 ###############\n";
+	print $BMPsubinfo, " InPut:  input R1 BAM:     $BMPbamin1\n";
+	print $BMPsubinfo, "         input R2 BAM:     $BMPbamin2\n";
+	print $BMPsubinfo, " Output: output R1 BAM:    $BMPbamout1\n";
+	print $BMPsubinfo, "         output R2 BAM:    $BMPbamout2\n\n";
+	
+	close BMPBAMIN1 if (defined fileno(BMPBAMIN1));
+	if ($BMPbamin1=~/\.bam$/i) {
+		unless (open (BMPBAMIN1, "$BMPpath_samtools view -h $BMPbamin1 | ")) {
+			print STDERR $BMPsubinfo, "Error: can NOT open input R1 BAM: $BMPbamin1\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BMPbamin1=~/\.sam$/i) {
+		unless (open (BMPBAMIN1, "$BMPpath_samtools view -S -h $BMPbamin1 | ")) {
+			print STDERR $BMPsubinfo, "Error: can NOT open input R1 SAM: $BMPbamin1\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BMPsubinfo, "Error: can NOT open input R1 SAM/BAM: $BMPbamin1\n";
+		return $BamKit_failure;
+	}
+	if ($BMPbamout1=~/\.bam$/i) {
+		unless (open (BMPBAMOUT1, " | $BMPpath_samtools view -h -b -S - > $BMPbamout1 ")) {
+			print STDERR $BMPsubinfo, "Error: can NOT write output R1 BAM: $BMPbamout1\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BMPbamout1=~/\.sam$/i) {
+		unless (open (BMPBAMOUT1, " | $BMPpath_samtools view -S -h - > $BMPbamout1 ")) {
+			print STDERR $BMPsubinfo, "Error: can NOT write output R1 SAM: $BMPbamout1\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BMPsubinfo, "Error: can NOT write output R1 SAM/BAM: $BMPbamout1\n";
+		return $BamKit_failure;
+	}
+	while (my $BMPline=<BMPBAMIN1>) {
+		chomp $BMPline;
+		if ($BMPline=~/^\@/) {
+			print BMPBAMOUT1 $BMPline, "\n";
+		}
+		else  {
+			my @BMParr=split(/\t/, $BMPline);
+			unless ($BMParr[1] & 0x0004) {
+				$BMParr[1]+=67;
+			}
+			print BMPBAMOUT1 join ("\t", @BMParr), "\n";
+		}
+	}
+	close BMPBAMIN1;
+	close BMPBAMOUT1;
+	unless (-s $BMPbamout1) {
+		print STDERR $BMPsubinfo, "Error: output R1 SAM/BAM: $BMPbamout1\n";
+		return $BamKit_failure;
+	}
+
+	close BMPBAMIN2 if (defined fileno(BMPBAMIN2));
+	if ($BMPbamin2=~/\.bam$/i) {
+		unless (open (BMPBAMIN2, "$BMPpath_samtools view -h $BMPbamin2 | ")) {
+			print STDERR $BMPsubinfo, "Error: can NOT open input R2 BAM: $BMPbamin2\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BMPbamin2=~/\.sam$/i) {
+		unless (open (BMPBAMIN2, "$BMPpath_samtools view -S -h $BMPbamin2 | ")) {
+			print STDERR $BMPsubinfo, "Error: can NOT open input R2 SAM: $BMPbamin2\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BMPsubinfo, "Error: can NOT open input R2 SAM/BAM: $BMPbamin2\n";
+		return $BamKit_failure;
+	}
+	if ($BMPbamout2=~/\.bam$/i) {
+		unless (open (BMPBAMOUT2, " | $BMPpath_samtools view -h -b -S - > $BMPbamout2 ")) {
+			print STDERR $BMPsubinfo, "Error: can NOT write output R2 BAM: $BMPbamout2\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BMPbamout2=~/\.sam$/i) {
+		unless (open (BMPBAMOUT2, " | $BMPpath_samtools view -S -h - > $BMPbamout2 ")) {
+			print STDERR $BMPsubinfo, "Error: can NOT write output R2 SAM: $BMPbamout2\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BMPsubinfo, "Error: can NOT write output R2 SAM/BAM: $BMPbamout2\n";
+		return $BamKit_failure;
+	}
+	while (my $BMPline=<BMPBAMIN2>) {
+		chomp $BMPline;
+		if ($BMPline=~/^\@/) {
+			print BMPBAMOUT2 $BMPline, "\n";
+		}
+		else  {
+			my @BMParr=split(/\t/, $BMPline);
+			unless ($BMParr[1] & 0x0004) {
+				$BMParr[1]+=131;
+			}
+			print BMPBAMOUT2 join ("\t", @BMParr), "\n";
+		}
+	}
+	close BMPBAMIN2;
+	close BMPBAMOUT2;
+	unless (-s $BMPbamout2) {
+		print STDERR $BMPsubinfo, "Error: output R2 SAM/BAM: $BMPbamout2\n";
+		return $BamKit_failure;
+	}
+	
+	return $BamKit_success;
+}
+
+
+
+
+
+### 
+### 
+### Global: $BamKit_success; $BamKit_failure;
+### Dependency:
+### Note:
+### Return: 1=Success    0= Failure
 1;
 __END__
