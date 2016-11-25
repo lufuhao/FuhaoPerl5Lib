@@ -961,7 +961,7 @@ sub RunFqTrinity {
 	
 	unless (defined $RQTfastq and -s $RQTfastq) {
 		print STDERR $RQTsubinfo, "Error: invalid FastQ/Fasta input\n";
-		return $FastaKit_filure;
+		return $FastaKit_failure;
 	}
 	
 	if ($RQTfastq=~/(\.fq$)|(\.fastq$)/i) {
@@ -1150,7 +1150,7 @@ sub SplitFastaByNumber {
 			print SFBNFASTAOUT $SFBNline;
 		}
 	}
-	close SFBNFASTAIN
+	close SFBNFASTAIN;
 	close SFBNFASTAOUT;
 	
 	return ($FastaKit_success, \@SFBNfilelist);
