@@ -8,6 +8,13 @@ FuhaoPerl5Lib::FastaKit
 
 Fasta -related tools
 
+=head1 Requirements
+
+    Bio::SeqIO
+    FuhaoPerl5Lib::FileKit qw/MoveFile RetrieveDir MergeFiles/;
+    FuhaoPerl5Lib::CmdKit;
+    FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
+
 =head1 DESCRIPTION
 
 =over 4
@@ -60,6 +67,12 @@ Fasta -related tools
 
     * Extract fasta sequences using s string of IDs
     * Dependancy: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
+    * Return: 1=Success    0=Failure
+
+=item FastaDedup ($input_fasta, $output_fasta)
+
+    * Remove duplicated fasta
+    * Dependancy: Bio::SeqIO;
     * Return: 1=Success    0=Failure
 
 =item Fastq2Fasta ($input.fastq, $out.fa)
@@ -163,13 +176,14 @@ use Cwd;
 use FuhaoPerl5Lib::FileKit qw/MoveFile RetrieveDir MergeFiles/;
 use FuhaoPerl5Lib::CmdKit;
 use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
+use Bio::SeqIO;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '201600809';
+$VERSION     = '20170106';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq);
-%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq)],
-                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup);
+%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup)],
+                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -1547,6 +1561,48 @@ sub AnalysisEmbossStretcherOutput {
 	return ($FastaKit_success, 	$ARESOidentity, $ARESOsimilarity, $ARESOgaps, $ARESOscore);
 }
 
+
+
+### Deduplicate fasta based on 100% sequence similarity, and will warn if different sequence have the same seqID
+### FastaDedup ($input_fasta, $output_fasta)
+### Global:
+### Dependancy: Bio::SeqIO;
+### Note:
+sub FastaDedup {
+	my ($FDfastain, $FDfastaout)=@_;
+	
+	my %FDidhash=();
+	my %FDseqhash=();
+	my $FDsubinfo='SUB(FastaKit::FastaDedup)';
+	
+	unless (defined $FDfastain and -s $FDfastain) {
+		print STDERR $FDsubinfo, "Error: invalid input fasta\n";
+		return $FastaKit_failure;
+	}
+	unless (defined $FDfastaout and $FDfastaout=~/^[\-\._\w\/\\]+$/){
+		print STDERR $FDsubinfo, "Error: invalid output fasta\n";
+		return $FastaKit_failure;
+	}
+	unlink $FDfastaout if (-e $FDfastaout);
+	
+	my $FDseqio  = Bio::SeqIO->new(-file => $FDfastain, -format => "fasta");
+	my $FDoutseq = Bio::SeqIO->new(-file => " > $FDfastaout", -format => "fasta");
+	
+	while(my $FDseqs = $FDseqio->next_seq) {
+		my $FDid  = $FDseqs->display_id;
+		my $FDseq = $FDseqs->seq;
+		unless (exists($FDseqhash{$FDseq})) {
+			$FDoutseq->write_seq($FDseqs);
+			$FDseqhash{$FDseq}++;
+			if (exists $FDidhash{$FDid}) {
+				print STDERR "Warnings: duplicated ID but different seq: $FDid\n";
+			}
+			$FDidhash{$FDid}++;
+		}
+	}
+	
+	return $FastaKit_success;
+}
 
 
 
