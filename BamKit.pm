@@ -50,7 +50,7 @@ Perl Modules:
     * $filter_code: 1=filter    0=filter_out
     * Return: 1=Sucesss    0=Failure
 
-=item BamKeepBothMates ($input.R1.bam, $input.R2.bam, $output.R1.bam, $output.R2.bam, [path_samtools])
+=item BamKeepBothMates ($input.R1.bam, $input.R2.bam, $paired.R1.bam, $paired.R2.bam, [$unpaired.R1.bam], [$unpaired.R2.bam], [path_samtools])
 
     * Keep alignments that have both mates mapped
     * Return: 1=Success    0=Failure
@@ -149,7 +149,7 @@ use FuhaoPerl5Lib::FileKit;
 use FuhaoPerl5Lib::MiscKit qw(IsReference);
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 
-$VERSION     = '20161103';
+$VERSION     = '20170217';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs );
@@ -1357,13 +1357,13 @@ sub BamExtractReadsUsingBed {
 
 
 ### Keep alignments that have both mates mapped
-### BamKeepBothMates ($input.R1.bam, $input.R2.bam, $output.R1.bam, $output.R2.bam, [path_samtools])
+### BamKeepBothMates ($input.R1.bam, $input.R2.bam, $paired.R1.bam, $paired.R2.bam, $unpaired.R1.bam, $unpaired.R2.bam, [path_samtools])
 ### Global: $BamKit_success; $BamKit_failure;
 ### Dependency:
 ### Note:
 ### Return: 1=Success    0=Failure
 sub BamKeepBothMates {
-	my ($BKBMbamin1, $BKBMbamin2, $BKBMbamout1, $BKBMbamout2, $BKBMpath_samtools)=@_;
+	my ($BKBMbamin1, $BKBMbamin2, $BKBMbamout1, $BKBMbamout2, $BKBMbamunpaird1, $BKBMbamunpaird2, $BKBMpath_samtools)=@_;
 
 #Default
 	my $BKBMsubinfo='SUB(BamKit::BamKeepBothMates)';
@@ -1372,8 +1372,11 @@ sub BamKeepBothMates {
 	my $BKBMnumkeep=0;
 	my $BKBMnumtotal=0;
 	my $BKBMnumsingle=0;
+	my $BKBMtest_unpaired1=0;
+	my $BKBMtest_unpaired2=0;
 	local *BKBMBAMIN1; local *BKBMBAMIN2;
-	local *BKBMBAMOUT1; local *BKBMBAMOUT2; 
+	local *BKBMBAMOUT1; local *BKBMBAMOUT2;
+	local *BKBMUNPAIR1; local *BKBMUNPAIR2;
 
 #Input and Output
 	unless (defined $BKBMbamin1 and -s $BKBMbamin1) {
@@ -1385,15 +1388,33 @@ sub BamKeepBothMates {
 		return $BamKit_failure;
 	}
 	unless (defined $BKBMbamout1 and $BKBMbamout1=~/^\S+$/) {
-		print STDERR $BKBMsubinfo, "Error: invalid output R1 BAM\n";
+		print STDERR $BKBMsubinfo, "Error: invalid output paired R1 BAM\n";
 		return $BamKit_failure;
 	}
 	unlink $BKBMbamout1 if (-e $BKBMbamout1);
 	unless (defined $BKBMbamout2 and $BKBMbamout2=~/^\S+$/) {
-		print STDERR $BKBMsubinfo, "Error: invalid output R2 BAM\n";
+		print STDERR $BKBMsubinfo, "Error: invalid output paired R2 BAM\n";
 		return $BamKit_failure;
 	}
 	unlink $BKBMbamout2 if (-e $BKBMbamout2);
+	if (defined $BKBMbamunpaird1) {
+		unless ($BKBMbamunpaird1=~/^\S+$/) {
+			print STDERR $BKBMsubinfo, "Error: invalid output unpaired R2 BAM\n";
+			return $BamKit_failure;
+		}
+		else {
+			$BKBMtest_unpaired1=1;
+		}
+	}
+	if (defined $BKBMbamunpaird2) {
+		unless ($BKBMbamunpaird2=~/^\S+$/) {
+			print STDERR $BKBMsubinfo, "Error: invalid output unpaired R2 BAM\n";
+			return $BamKit_failure;
+		}
+		else {
+			$BKBMtest_unpaired2=1;
+		}
+	}
 	
 	print "\n", $BKBMsubinfo, "########### SUMMARY 1 ###############\n";
 	print $BKBMsubinfo, " InPut:  input R1 BAM:     $BKBMbamin1\n";
@@ -1490,26 +1511,46 @@ sub BamKeepBothMates {
 		return $BamKit_failure;
 	}
 	close BKBMBAMOUT1 if (defined fileno(BKBMBAMOUT1));
-	if ($BKBMbamout1=~/\.bam/i) {
+	if ($BKBMbamout1=~/\.bam$/i) {
 		unless (open (BKBMBAMOUT1, " | $BKBMpath_samtools view -S -h -b - > $BKBMbamout1")) {
-			print STDERR $BKBMsubinfo, "Error: can NOT write output R1 BAM: $BKBMbamout1\n";
+			print STDERR $BKBMsubinfo, "Error: can NOT write output paired R1 BAM: $BKBMbamout1\n";
 			return $BamKit_failure;
 		}
 	}
-	elsif ($BKBMbamout1=~/\.sam/i) {
+	elsif ($BKBMbamout1=~/\.sam$/i) {
 		unless (open (BKBMBAMOUT1, " | $BKBMpath_samtools view -S -h - > $BKBMbamout1")) {
-			print STDERR $BKBMsubinfo, "Error: can NOT write output R1 SAM: $BKBMbamout1\n";
+			print STDERR $BKBMsubinfo, "Error: can NOT write output paired R1 SAM: $BKBMbamout1\n";
 			return $BamKit_failure;
 		}
 	}
 	else {
-		print STDERR $BKBMsubinfo, "Error: can NOT write output R1 SAM/BAM\n";
+		print STDERR $BKBMsubinfo, "Error: can NOT write output paired R1 SAM/BAM\n";
 		return $BamKit_failure;
+	}
+	if ($BKBMtest_unpaired1==1) {
+		close BKBMUNPAIR1 if (defined fileno(BKBMUNPAIR1));
+		if ($BKBMbamunpaird1=~/\.bam$/i) {
+			unless (open (BKBMUNPAIR1, " | $BKBMpath_samtools view -S -h -b - > $BKBMbamunpaird1")) {
+				print STDERR $BKBMsubinfo, "Error: can NOT write output unpaired R1 BAM: $BKBMbamunpaird1\n";
+				return $BamKit_failure;
+			}
+		}
+		elsif ($BKBMbamunpaird1=~/\.sam$/i) {
+			unless (open (BKBMUNPAIR1, " | $BKBMpath_samtools view -S -h - > $BKBMbamunpaird1")) {
+				print STDERR $BKBMsubinfo, "Error: can NOT write output unpaired R1 SAM: $BKBMbamunpaird1\n";
+				return $BamKit_failure;
+			}
+		}
+		else {
+			print STDERR $BKBMsubinfo, "Error: can NOT write output unpaired R1 SAM/BAM\n";
+			return $BamKit_failure;
+		}
 	}
 	while (my $BKBMline=<BKBMBAMIN1>) {
 		chomp $BKBMline;
 		if ($BKBMline=~/^\@/) {
 			print BKBMBAMOUT1 $BKBMline, "\n";
+			print BKBMUNPAIR1 $BKBMline, "\n" if ($BKBMtest_unpaired1==1);
 			next;
 		}
 		else{
@@ -1517,10 +1558,14 @@ sub BamKeepBothMates {
 			if (exists $BKBMreadhash{$BKBMarr[0]} and exists $BKBMreadhash{$BKBMarr[0]}{'keep'} and $BKBMreadhash{$BKBMarr[0]}{'keep'}>0) {
 				print BKBMBAMOUT1 $BKBMline, "\n";
 			}
+			else {
+				print BKBMUNPAIR1 $BKBMline, "\n" if ($BKBMtest_unpaired1==1);
+			}
 		}
 	}
 	close BKBMBAMIN1;
 	close BKBMBAMOUT1;
+	close BKBMUNPAIR1 if ($BKBMtest_unpaired1==1);
 	unless (-s $BKBMbamout1) {
 		print STDERR $BKBMsubinfo, "Error: output R1 SAM/BAMerror: $BKBMbamout1\n";
 		return $BamKit_failure;
@@ -1544,13 +1589,13 @@ sub BamKeepBothMates {
 		return $BamKit_failure;
 	}
 	close BKBMBAMOUT2 if (defined fileno(BKBMBAMOUT2));
-	if ($BKBMbamout2=~/\.bam/i) {
+	if ($BKBMbamout2=~/\.bam$/i) {
 		unless (open (BKBMBAMOUT2, " | $BKBMpath_samtools view -S -h -b - > $BKBMbamout2")) {
 			print STDERR $BKBMsubinfo, "Error: can NOT write output R2 BAM: $BKBMbamout2\n";
 			return $BamKit_failure;
 		}
 	}
-	elsif ($BKBMbamout2=~/\.sam/i) {
+	elsif ($BKBMbamout2=~/\.sam$/i) {
 		unless (open (BKBMBAMOUT2, " | $BKBMpath_samtools view -S -h - > $BKBMbamout2")) {
 			print STDERR $BKBMsubinfo, "Error: can NOT write output R2 SAM: $BKBMbamout2\n";
 			return $BamKit_failure;
@@ -1560,10 +1605,31 @@ sub BamKeepBothMates {
 		print STDERR $BKBMsubinfo, "Error: can NOT write output R2 SAM/BAM\n";
 		return $BamKit_failure;
 	}
+	
+	if ($BKBMtest_unpaired2==1) {
+		close BKBMUNPAIR2 if (defined fileno(BKBMUNPAIR2));
+		if ($BKBMbamunpaird2=~/\.bam$/i) {
+			unless (open (BKBMUNPAIR2, " | $BKBMpath_samtools view -S -h -b - > $BKBMbamunpaird2")) {
+				print STDERR $BKBMsubinfo, "Error: can NOT write output unpaired R2 BAM: $BKBMbamunpaird2\n";
+				return $BamKit_failure;
+			}
+		}
+		elsif ($BKBMbamunpaird2=~/\.sam$/i) {
+			unless (open (BKBMUNPAIR2, " | $BKBMpath_samtools view -S -h - > $BKBMbamunpaird2")) {
+				print STDERR $BKBMsubinfo, "Error: can NOT write output unpaired R2 SAM: $BKBMbamunpaird2\n";
+				return $BamKit_failure;
+			}
+		}
+		else {
+			print STDERR $BKBMsubinfo, "Error: can NOT write output unpaired R2 SAM/BAM\n";
+			return $BamKit_failure;
+		}
+	}
 	while (my $BKBMline=<BKBMBAMIN2>) {
 		chomp $BKBMline;
 		if ($BKBMline=~/^\@/) {
 			print BKBMBAMOUT2 $BKBMline, "\n";
+			print BKBMUNPAIR2 $BKBMline, "\n" if ($BKBMtest_unpaired2==1);
 			next;
 		}
 		else {
@@ -1571,10 +1637,14 @@ sub BamKeepBothMates {
 			if (exists $BKBMreadhash{$BKBMarr[0]} and exists $BKBMreadhash{$BKBMarr[0]}{'keep'} and $BKBMreadhash{$BKBMarr[0]}{'keep'}>0) {
 				print BKBMBAMOUT2 $BKBMline, "\n";
 			}
+			else {
+				print BKBMUNPAIR2 $BKBMline, "\n" if ($BKBMtest_unpaired2==1);
+			}
 		}
 	}
 	close BKBMBAMIN2;
 	close BKBMBAMOUT2;
+	close BKBMUNPAIR2 if ($BKBMtest_unpaired2==1);
 	unless (-s $BKBMbamout2) {
 		print STDERR $BKBMsubinfo, "Error: output R2 SAM/BAMerror: $BKBMbamout2\n";
 		return $BamKit_failure;
@@ -1582,7 +1652,6 @@ sub BamKeepBothMates {
 	
 	return $BamKit_success;
 }
-
 
 
 
