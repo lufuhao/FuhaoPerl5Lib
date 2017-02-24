@@ -60,7 +60,6 @@ Perl Modules:
     * Calculate reference length based cigar
     * Return the reference length of that BAM alignment
 
-
 =item CalCigarReadLength (CIGAR)
 
     * Calculate read length based cigar
@@ -149,7 +148,7 @@ use FuhaoPerl5Lib::FileKit;
 use FuhaoPerl5Lib::MiscKit qw(IsReference);
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 
-$VERSION     = '20170217';
+$VERSION     = '20170224';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs );
