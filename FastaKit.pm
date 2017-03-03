@@ -69,6 +69,12 @@ Fasta -related tools
     * Dependancy: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
     * Return: 1=Success    0=Failure
 
+=item &ExtractFastaSeqtk (my.fa, output.fa, $id_file, [path_seqtk]);
+
+    * Extract fasta sequences using seqtk with a list of ids/bed, better for large list
+    * Dependancy: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
+    * Return: 0=fail; 1=success
+
 =item FastaDedup ($input_fasta, $output_fasta)
 
     * Remove duplicated fasta
@@ -178,7 +184,7 @@ use FuhaoPerl5Lib::CmdKit;
 use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
 use Bio::SeqIO;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20170106';
+$VERSION     = '20170303';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup);
@@ -492,6 +498,53 @@ sub ExtractFastaSamtoolsID {
 	return $FastaKit_success;
 }
 
+
+
+
+
+### Extract fasta sequences using seqtk with a list of ids/bed, better for large list
+### &ExtractFastaSeqtk (my.fa, output.fa, $id_file, [path_seqtk]);
+### Return: 0=fail; 1=success
+### Global:
+### Dependancy: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
+### Note: 
+sub ExtractFastaSeqtk {
+	my ($EFSinputfa, $EFSoutputfa, $EFSidfile, $EFSpath_seqtk)=@_;
+	
+	my $EFSsubinfo='SUB(FastaKit::ExtractFastaSeqtk)';
+	$EFSpath_seqtk='seqtk' unless (defined $EFSpath_seqtk);
+	
+	unless (defined $EFSinputfa and -s $EFSinputfa) {
+		print STDERR $EFSsubinfo, "Error: invalid input fasta file: $EFSinputfa\n";
+		return $FastaKit_failure;
+	}
+	unless (-s "$EFSinputfa.fai") {
+		unless (&IndexFasta($EFSinputfa, $EFSpath_seqtk)) {
+			print STDERR $EFSsubinfo, "Error: unable to index fasta file: $EFSinputfa\n";
+			return $FastaKit_failure;
+		}
+	}
+	unless (defined $EFSidfile and $EFSidfile=~/^\S+$/) {
+		print STDERR $EFSsubinfo, "Error: invalid fasta ID list file: $EFSidfile\n";
+		return $FastaKit_failure;
+	}
+	unless (defined $EFSoutputfa and $EFSoutputfa=~/^\S+$/) {
+		print STDERR $EFSsubinfo, "Error: invalid output fasta file: $EFSoutputfa\n";
+		return $FastaKit_failure;
+	}
+	unlink $EFSoutputfa if (-e $EFSoutputfa);
+	
+	unless (&exec_cmd_return("$EFSpath_seqtk subseq $EFSinputfa $EFSidfile > $EFSoutputfa")) {
+		print STDERR $EFSsubinfo, "Error: seqtk extract fasta running error\n";
+		return $FastaKit_failure;
+	}
+	unless (-s $EFSoutputfa) {
+		print STDERR $EFSsubinfo, "Error: seqtk extract fasta output error: $EFSoutputfa\n";
+		return $FastaKit_failure;
+	}
+	
+	return $FastaKit_success;
+}
 
 
 
