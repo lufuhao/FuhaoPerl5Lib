@@ -86,6 +86,19 @@ Fasta -related tools
     * Convert fastq to fasta
     * Return: 1=Success    0=Failure
 
+=item Frame3Translation ($cdsseq)
+
+    * Translation CDS to protein in 6 frames
+    * Return: $prot={ 0=> AA, 1 => AA, 2 => AA}
+    * Note: 0,1,2 forsword strand: shift 0/1/2 base from 5 end
+
+=item Frame6Translation ($cdsseq)
+
+    * Translation CDS to protein in 6 frames
+    * Return: $prot={ 0=> AA, 1 => AA, 2 => AA, 3 => AA, 4 => AA, 5 => AA}
+    * Note: 0,1,2 forsword strand: shift 0/1/2 base from 5 end
+    * Note: 3,4,5 reverse complement strand: shift 0/1/2 base from 5 end
+
 =item GuessFormat ($input.seq)
 
     * Guess sequence file format from extension names
@@ -100,6 +113,11 @@ Fasta -related tools
 
     * Count number sequences in fasta
     * Return: 0/number_of_sequence
+
+=item ReadFastaLength ($input.fa[.gz])
+
+     Read fasta seq length into hash \$hash={('seqid1' => length1, 'seqid2' => length2,)}
+     Return: (1=Success/0=failure, $hash)
 
 =item RenameFasta ($fastain, $fastqout, $prefix, $num_digit, $RFDesc)
 
@@ -137,6 +155,11 @@ Fasta -related tools
 
     * Seq Reverse Complement
     * Return: reverse complement seq
+
+=item SplitFastaByLength (input.fasta, total_length, output.prefix)
+
+    * Split Fasta file into several files by total_length
+    * Return: (1/0, \@arr(filenames))
 
 =item SplitFastaByNumber (input.fasta, number, output.prefix)
 
@@ -179,6 +202,7 @@ use strict;
 use warnings;
 use Exporter;
 use Cwd;
+use Data::Dumper qw /Dumper/;
 use FuhaoPerl5Lib::FileKit qw/MoveFile RetrieveDir MergeFiles/;
 use FuhaoPerl5Lib::CmdKit;
 use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
@@ -187,9 +211,9 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20170303';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk);
-%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk)],
-                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength);
+%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength)],
+                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -1164,7 +1188,7 @@ sub RenameFasta {
 
 
 ### split Fasta file into several files by number of sequence
-### SplitFastaByNumber (input.fasta, number, output.prefix)
+### SplitFastaByNumber (input.fasta[.gz], number, output.prefix)
 ### Global: $FastaKit_failure; $FastaKit_success;
 ### Dependency: 
 ### Note: 
@@ -1175,20 +1199,31 @@ sub SplitFastaByNumber {
 	local *SFBNFASTAIN; local *SFBNFASTAOUT;
 	my $SFBNsubinfo='SUB(FastaKit::SplitFastaByNumber)';
 	$SFBNnum=100 unless (defined $SFBNnum and $SFBNnum=~/^\d+$/ and $SFBNnum>0);
-	$SFBNoutprefix=$SFBNfasta unless (defined $SFBNoutprefix);
+	unless (defined $SFBNoutprefix) {
+		$SFBNoutprefix=$SFBNfasta;
+		$SFBNoutprefix=~s/^.*\///;
+	}
 
 	unless (defined $SFBNfasta and -s $SFBNfasta) {
 		print STDERR $SFBNsubinfo, "Error: invalid fasta input\n";
 		return $FastaKit_failure;
 	}
 	my $SFBNcount=0;
-	my $SFBNcountfileno=0;
+	my $SFBNcountfileno='00000001';
 	my @SFBNfilelist=();
 
 	close SFBNFASTAIN if (defined fileno(SFBNFASTAIN));
-	unless (open (SFBNFASTAIN, " < $SFBNfasta")) {
-		print STDERR "${SFBNsubinfo}Error: can not open fasta: $SFBNfasta\n";
-		return $FastaKit_failure;
+	if ($SFBNfasta=~/\.gz$/i) {
+		unless (open (SFBNFASTAIN, " zcat $SFBNfasta | ")) {
+			print STDERR "${SFBNsubinfo}Error: can not open gzipped fasta: $SFBNfasta\n";
+			return $FastaKit_failure;
+		}
+	}
+	else {
+		unless (open (SFBNFASTAIN, " < $SFBNfasta")) {
+			print STDERR "${SFBNsubinfo}Error: can not open fasta: $SFBNfasta\n";
+			return $FastaKit_failure;
+		}
 	}
 	close SFBNFASTAOUT if (defined fileno(SFBNFASTAOUT));
 	unless (open (SFBNFASTAOUT, " > $SFBNoutprefix.$SFBNcountfileno.fa")) {
@@ -1201,7 +1236,7 @@ sub SplitFastaByNumber {
 			if ($SFBNcount>$SFBNnum) {
 				close SFBNFASTAOUT if (defined fileno(SFBNFASTAOUT));
 				if (-s "$SFBNoutprefix.$SFBNcountfileno.fa") {
-					push (@SFBNfilelist, "$SFBNoutprefix.$SFBNcountfileno.fa")
+					push (@SFBNfilelist, "$SFBNoutprefix.$SFBNcountfileno.fa");
 				}
 				$SFBNcountfileno++;
 				unlink ("$SFBNoutprefix.$SFBNcountfileno.fa") if (-e "$SFBNoutprefix.$SFBNcountfileno.fa");
@@ -1219,10 +1254,133 @@ sub SplitFastaByNumber {
 	}
 	close SFBNFASTAIN;
 	close SFBNFASTAOUT;
-	
+	if (-s "$SFBNoutprefix.$SFBNcountfileno.fa") {
+		push (@SFBNfilelist, "$SFBNoutprefix.$SFBNcountfileno.fa");
+	}
 	return ($FastaKit_success, \@SFBNfilelist);
 }
 
+
+
+
+
+### split Fasta file into several files by total length
+### SplitFastaByNumber (input.fasta, length, output.prefix)
+### Global: $FastaKit_failure; $FastaKit_success;
+### Dependency: 
+### Note: 
+### Return: (1/0, \@arr(filenames))
+sub SplitFastaByLength {
+	my ($SFBLfasta, $SFBLnum, $SFBLoutprefix)=@_;
+	
+	local *SFBLFASTAIN; local *SFBLFASTAOUT;
+	my $SFBLsubinfo='SUB(FastaKit::SplitFastaByLength)';
+	unless (defined $SFBLnum and $SFBLnum=~/^\d+$/ and $SFBLnum>0) {
+		print STDERR $SFBLsubinfo, "Error: invalid total length\n";
+		return $FastaKit_failure;
+	}
+	unless (defined $SFBLoutprefix) {
+		$SFBLoutprefix=$SFBLfasta;
+		$SFBLoutprefix=~s/^.*\///;
+	}
+	unless (defined $SFBLfasta and -s $SFBLfasta) {
+		print STDERR $SFBLsubinfo, "Error: invalid fasta input\n";
+		return $FastaKit_failure;
+	}
+	my $SFBLcountfileno='00000001';
+	my @SFBLfilelist=();
+	my $SFBLindfilelength=0;
+	my $SFBLindfilenum=0;
+	
+	my ($SFBLtest, $SFBLseqlenhash)=&ReadFastaLength($SFBLfasta);
+	unless ($SFBLtest) {
+		print STDERR $SFBLsubinfo, "Error: ReadFastaLength failed: $SFBLfasta\n";
+		return $FastaKit_failure;
+	}
+	
+	foreach my $SFBLindseq (sort keys %{$SFBLseqlenhash}) {
+		if (${$SFBLseqlenhash}{$SFBLindseq} !~/^\d+/) {
+			print STDERR $SFBLsubinfo, "Error: invalid seq : $SFBLindseq\n";
+			return $FastaKit_failure;
+		}
+		elsif (${$SFBLseqlenhash}{$SFBLindseq}<=0) {
+			print STDERR $SFBLsubinfo, "Warnings: empty seq : $SFBLindseq\n";
+		}
+		elsif (${$SFBLseqlenhash}{$SFBLindseq}>$SFBLnum) {
+			print STDERR $SFBLsubinfo, "Error: larger seq : $SFBLindseq", ${$SFBLseqlenhash}{$SFBLindseq}, "larger than required total length $SFBLnum\n";
+			return $FastaKit_failure;
+		}
+	}
+	
+	if ($SFBLfasta=~/\.gz$/i) {
+		unless (open (SFBLFASTAIN, " zcat $SFBLfasta | ")) {
+			print STDERR $SFBLsubinfo, "Error: can not open gzipped fasta: $SFBLfasta\n";
+			return $FastaKit_failure;
+		}
+	}
+	else {
+		unless (open (SFBLFASTAIN, " < $SFBLfasta")) {
+			print STDERR $SFBLsubinfo, "Error: can not open fasta: $SFBLfasta\n";
+			return $FastaKit_failure;
+		}
+	}
+	close SFBLFASTAOUT if (defined fileno(SFBLFASTAOUT));
+	unless (open (SFBLFASTAOUT, " > $SFBLoutprefix.$SFBLcountfileno.fa")) {
+		print STDERR $SFBLsubinfo, "Error: can not write fasta: $SFBLoutprefix.$SFBLcountfileno.fa\n";
+		return $FastaKit_failure;
+	}
+	while (my $SFBLline=<SFBLFASTAIN>) {
+		if ($SFBLline=~/^>/) {
+			my $SFBLid=$SFBLline; 
+			if ($SFBLline=~/^>(\S+)\s*/) {
+				$SFBLid=$1;
+			}
+			else {
+				print STDERR $SFBLsubinfo, "Error: invalid seq header (a line $.): $SFBLline\n";
+				return $FastaKit_failure;
+			}
+			unless (exists ${$SFBLseqlenhash}{$SFBLid}) {
+				print STDERR $SFBLsubinfo, "Error: seqid no length: $SFBLid\n";
+				return $FastaKit_failure;
+			}
+			if (($SFBLindfilelength + ${$SFBLseqlenhash}{$SFBLid})>$SFBLnum) {
+				close SFBLFASTAOUT if (defined fileno(SFBLFASTAOUT));
+				if (-s "$SFBLoutprefix.$SFBLcountfileno.fa") {
+					push (@SFBLfilelist, "$SFBLoutprefix.$SFBLcountfileno.fa");
+					print $SFBLsubinfo, "Info: num $SFBLindfilenum total $SFBLindfilelength bp $SFBLoutprefix.$SFBLcountfileno.fa\n";
+				}
+				
+				$SFBLcountfileno++;
+				unlink ("$SFBLoutprefix.$SFBLcountfileno.fa") if (-e "$SFBLoutprefix.$SFBLcountfileno.fa");
+				unless (open (SFBLFASTAOUT, ">$SFBLoutprefix.$SFBLcountfileno.fa")) {
+					print STDERR $SFBLsubinfo, "Error: can not write fasta: $SFBLoutprefix.$SFBLcountfileno.fa\n";
+					return $FastaKit_failure;
+				}
+				$SFBLindfilenum=0;
+				$SFBLindfilelength=0;
+			}
+			print SFBLFASTAOUT $SFBLline;
+			$SFBLindfilelength = $SFBLindfilelength + ${$SFBLseqlenhash}{$SFBLid};
+			$SFBLindfilenum++;
+		}
+		else {
+			print SFBLFASTAOUT $SFBLline;
+		}
+		
+	}
+	close SFBLFASTAIN;
+	close SFBLFASTAOUT;
+	if (-s "$SFBLoutprefix.$SFBLcountfileno.fa") {
+		push (@SFBLfilelist, "$SFBLoutprefix.$SFBLcountfileno.fa");
+		print $SFBLsubinfo, "Info: num $SFBLindfilenum total $SFBLindfilelength bp $SFBLoutprefix.$SFBLcountfileno.fa\n";
+	}
+	print $SFBLsubinfo, "Info: total splited files: ", scalar(@SFBLfilelist), "\n";
+	return ($FastaKit_success, \@SFBLfilelist);
+}
+
+
+	my $SFBLindfilelength=0;
+	my $SFBLindfilenum=0;
 
 
 ### Seq Reverse Complement
@@ -1292,6 +1450,69 @@ sub codon2aa2 {
         return '?';
     }
 }
+
+
+
+
+### Get 3 Frame translation
+### $prot=Frame3Translation($cds_seq)
+### Global:
+### Dependency: &Codon2AA
+### Return $prot={ 0=> AA, 1 => AA, 2 => AA}
+### Note: 0,1,2 forsword strand: shift 0/1/2 base from 5 end
+sub Frame3Translation {
+	my $FTcdsseq=shift;
+	
+	my $FTsubinfo='SUB(FastaKit::Frame3Translation)';
+	my $FTaa={};
+	
+	for (my $FTframe=0; $FTframe<3; $FTframe++) {
+		${$FTaa}{$FTframe}='';
+		for (my $Ftseqstart=$FTframe; $Ftseqstart<=(length($FTcdsseq)-3); $Ftseqstart+=3) {
+			my $FTcodon=substr($FTcdsseq, $Ftseqstart, 3);
+			${$FTaa}{$FTframe}.=&Codon2AA($FTcodon);
+		}
+	}
+	
+	return $FTaa;
+}
+
+
+
+### Get 6 Frame translation
+### $prot=Frame6Translation($cds_seq)
+### Global:
+### Dependency: &SeqRevComp, &Codon2AA
+### Return $prot={ 0=> AA, 1 => AA, 2 => AA, 3 => AA, 4 => AA, 5 => AA}
+### Note: 0,1,2 forsword strand: shift 0/1/2 base from 5 end
+### Note: 3,4,5 reverse complement strand: shift 0/1/2 base from 5 end
+sub Frame6Translation {
+	my $FTcdsseq=shift;
+	
+	my $FTsubinfo='SUB(FastaKit::Frame3Translation)';
+	my $FTaa={};
+	
+	for (my $FTframe=0; $FTframe<3; $FTframe++) {
+		${$FTaa}{$FTframe}='';
+		for (my $Ftseqstart=$FTframe; $Ftseqstart<(length($FTcdsseq)-2); $Ftseqstart+=3) {
+			my $FTcodon=substr($FTcdsseq, $Ftseqstart, 3);
+			${$FTaa}{$FTframe}.=&Codon2AA($FTcodon);
+		}
+	}
+	
+	$FTcdsseq=&SeqRevComp($FTcdsseq);
+	for (my $FTframe=0; $FTframe<3; $FTframe++) {
+		${$FTaa}{$FTframe+3}='';
+		for (my $Ftseqstart=$FTframe; $Ftseqstart<(length($FTcdsseq)-2); $Ftseqstart+=3) {
+			my $FTcodon=substr($FTcdsseq, $Ftseqstart, 3);
+			${$FTaa}{$FTframe+3}.=&Codon2AA($FTcodon);
+		}
+	}
+	
+	return $FTaa;
+}
+
+
 
 
 
@@ -1656,6 +1877,85 @@ sub FastaDedup {
 	
 	return $FastaKit_success;
 }
+
+
+
+
+### Read [gzipped fasta get the length into hash]
+### ReadFastaLength($fasta[.gz])
+### 
+sub ReadFastaLength {
+	my $RFLfasta=shift;
+	
+	my $RFLsubinfo='SUB(FastaKit::ReadFastaLength)';
+	my %RFLseqlength=();
+	my $RFLcount=0;
+	local *RFLFASTAIN;
+	my $RFLseqid='';
+	my $RFLseqidvlen=0;
+
+	unless (defined $RFLfasta and -s $RFLfasta) {
+		print STDERR $RFLsubinfo, "Error: invalid fasta\n";
+		return $FastaKit_failure;
+	}
+	
+	close RFLFASTAIN if (defined fileno(RFLFASTAIN));
+	if ($RFLfasta=~/\.gz$/i) {
+		unless (open (RFLFASTAIN, " gzip -cd $RFLfasta | ")) {
+			print STDERR $RFLsubinfo, "Error: can not open gzipped fasta: $RFLfasta\n";
+			return $FastaKit_failure;
+		}
+	}
+	else {
+		unless (open (RFLFASTAIN, " < $RFLfasta")) {
+			print STDERR $RFLsubinfo, "Error: can not open fasta: $RFLfasta\n";
+			return $FastaKit_failure;
+		}
+	}
+
+	while (my $RFLline=<RFLFASTAIN>) {
+		chomp $RFLline;
+		if ($RFLline=~/^>/ or eof(RFLFASTAIN)) {
+			if ($RFLcount>0 or eof(RFLFASTAIN)) {
+				if ($RFLseqidvlen <=0) {
+					print STDERR $RFLsubinfo, "Warnings: seqid $RFLseqid length $RFLseqidvlen <=0\n";
+				}
+				if (eof(RFLFASTAIN)) {
+					unless ($RFLline=~/^>/) {
+						$RFLseqidvlen = $RFLseqidvlen + length($RFLline);
+					}
+				}
+				if (exists $RFLseqlength{$RFLseqid}) {
+					print STDERR $RFLsubinfo, "Warnings: duplicated seqid: $RFLseqid\n";
+					print Dumper \%RFLseqlength;
+					return $FastaKit_failure;
+				}
+				else {
+					$RFLseqlength{$RFLseqid}=$RFLseqidvlen;
+				}
+			}
+			if ($RFLline=~/^>/) {
+				if ($RFLline=~/^>(\S+)\s*/) {
+					$RFLseqid=$1;
+					$RFLcount++;
+				}
+				else {
+					print STDERR $RFLsubinfo, "Error: invalid seq name (at line $.): $RFLline\n";
+					return $FastaKit_failure;
+				}
+			}
+			$RFLseqidvlen=0;
+		}
+		else {
+			$RFLseqidvlen = $RFLseqidvlen + length($RFLline);
+		}
+
+	}
+	close RFLFASTAIN;
+	print $RFLsubinfo, "Sum: read total seqs ", scalar(keys %RFLseqlength), "\n";
+	return ($FastaKit_success, \%RFLseqlength);
+}
+
 
 
 
