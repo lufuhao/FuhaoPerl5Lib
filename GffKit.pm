@@ -22,7 +22,7 @@ Perl Modules:
     * Return: 1=Sucesss    0=Failure
     * Note: reference.fa needs samtools while reference.fa.fai donot
 
-@EXPORT      = qw();
+
 =item WriteGff3 (output.gff3, \%(gene))
 
 =item ExonerateGff3Reformat (\$cDNA_gff3_input, \$CDS_gff3_input, \$file_gff3_output)
@@ -65,8 +65,9 @@ use FuhaoPerl5Lib::FastaKit qw/IndexFasta Frame3Translation SeqRevComp/;
 use Bio::DB::Fasta;
 use Data::Dumper qw/Dumper/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20170826';
+$VERSION     = '20170914';
 @ISA         = qw(Exporter);
+@EXPORT      = qw();
 @EXPORT_OK   = qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat);
 %EXPORT_TAGS = ( DEFAULT => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat)],
                  ALL    => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat)]);
@@ -209,7 +210,7 @@ sub GffReverseStrand {
 
 
 ### Read GFF3 into hash
-### 
+### ($GffKit_success, $RGreferenceids, $RGgene, $RGgene2mrna, $RGmrnas, $RGexons, $RGcds)=ReadGff3($RGgffin, $RGfasta)
 ###
 ### %referenceids  => ( $reference_id => $gene_start_pos => $gene_id => num++)
 ### %gene2mrna     => ( $gene_id => $mrna_id => num++ )
@@ -360,7 +361,7 @@ sub ReadGff3 {
 			$RGexonid=~s/^.*ID=//; $RGexonid=~s/;.*$//;
 			foreach my $RGindpar (@RGtemparr) {
 				if (exists ${$RGexons}{$RGindpar} and exists ${$RGexons}{$RGindpar}{'exon'} and exists ${$RGexons}{$RGindpar}{'exon'}{$RGarr[3]} and exists ${$RGexons}{$RGindpar}{'exon'}{$RGarr[3]}{$RGarr[4]}) {
-					print STDERR $RGsubinfo, "Error: repeated exons ".$RGarr[3].'-'.$RGarr[4]. "for mRNA $RGindpar\n";
+					print STDERR $RGsubinfo, "Error: repeated exons ".$RGarr[3].' - '.$RGarr[4]. " for mRNA $RGindpar\n";
 					return  $GffKit_failure;
 				}
 				${$RGexons}{$RGindpar}{'exon'}{$RGarr[3]}{$RGarr[4]}=$RGexonid;
@@ -455,7 +456,6 @@ sub ReadGff3 {
 		}
 	}
 	close RGGFFIN;
-
 
 
 
@@ -779,7 +779,7 @@ sub ReadGff3 {
 					print $RGsubinfo, "Error: strand + internal stop: mRNA $RGind_mrna\n";
 					print Dumper $RGphases;
 					print Dumper $RGprot;
-					return $GffKit_failure;
+#					return $GffKit_failure;
 				}
 				
 				if (scalar(@RGbestframe)==1) {
@@ -839,7 +839,7 @@ sub ReadGff3 {
 					print $RGsubinfo, "Error: strand - internal stop: mRNA  $RGind_mrna\n";
 					print Dumper $RGphases;
 					print Dumper $RGprot;
-					return $GffKit_failure;
+#					return $GffKit_failure;
 				}
 				if (scalar(@RGbestframe)==1) {
 					$RGphases=[];
@@ -1119,7 +1119,7 @@ sub GetPartialPhase {
 
 
 ### Write GFF3 output
-### 
+### WriteGff3($EGoutgff3, $WGref2gene, $WGgene2mrna, $WGgene, $WGmrna, $WGexon, $WGcds)
 ###
 ### %referenceids  => ( $reference_id => $gene_start_pos => $gene_id => num++)
 ### %gene2mrna     => ( $gene_id => $mrna_id => num++ )
@@ -1174,7 +1174,7 @@ sub WriteGff3 {
 				}
 				unless (exists ${$WGgene}{$WGgeneid}{'reference'} and 
 						( ${$WGgene}{$WGgeneid}{'reference'} eq $WGref )) {
-					print STDERR $WGsubinfo, "Error: inconsistent ref: GENE $WGgeneid\n";
+					print STDERR $WGsubinfo, "Error: inconsistent ref $WGref: GENE $WGgeneid\n";
 					return $GffKit_failure;
 				}
 				unless (exists ${$WGgene}{$WGgeneid}{'start'} and 
@@ -1257,7 +1257,7 @@ sub WriteGff3 {
 						@WGarr=($WGref, '.', 'mRNA', ${$WGmrna}{$WGmrnaid}{'start'}, ${$WGmrna}{$WGmrnaid}{'end'}, ${$WGmrna}{$WGmrnaid}{'score'}, ${$WGmrna}{$WGmrnaid}{'strand'}, '.', "ID=$WGmrnaid;Parent=$WGgeneid");
 						foreach my $WGkey2 (keys %{${$WGmrna}{$WGmrnaid}}) {
 							next if ($WGkey2 =~/^(reference)|(start)|(end)|(strand)|(score)$/);
-							print $WGsubinfo, "Test: gene $WGgeneid \${\$WGgene}{\$WGgeneid}\n"; print Dumper ${$WGgene}{$WGgeneid}; ### For test ###
+#							print $WGsubinfo, "Test: gene $WGgeneid \${\$WGgene}{\$WGgeneid}\n"; print Dumper ${$WGgene}{$WGgeneid}; ### For test ###
 							if (($WGkey2 eq 'score') and ${$WGmrna}{$WGmrnaid}{$WGkey2} =~/^\d+\.*\d*$/) {
 								$WGarr[5]=${$WGmrna}{$WGmrnaid}{$WGkey2};
 							}
@@ -1275,7 +1275,8 @@ sub WriteGff3 {
 							unless (exists ${$WGexon}{$WGmrnaid}{'reference'} and 
 									(${$WGexon}{$WGmrnaid}{'reference'} eq $WGref)
 							) {
-								print STDERR $WGsubinfo, "Error: inconsistent exon ref: mRNA $WGmrnaid\n";
+								print STDERR $WGsubinfo, "Error: inconsistent exon ref ($WGref): mRNA $WGmrnaid REF ", ${$WGexon}{$WGmrnaid}{'reference'}, "\n";
+								
 								return $GffKit_failure;
 							}
 							unless (exists ${$WGexon}{$WGmrnaid}{'strand'} and 
@@ -1329,7 +1330,7 @@ sub WriteGff3 {
 							unless (exists ${$WGcds}{$WGmrnaid}{'reference'} and 
 									(${$WGcds}{$WGmrnaid}{'reference'} eq $WGref)
 							) {
-								print STDERR $WGsubinfo, "Error: inconsistent exon ref: mRNA $WGmrnaid\n";
+								print STDERR $WGsubinfo, "Error: inconsistent CDS ref: mRNA $WGmrnaid\n";
 								return $GffKit_failure;
 							}
 							unless (exists ${$WGcds}{$WGmrnaid}{'strand'} and 
@@ -1730,8 +1731,6 @@ sub ExonerateGff3Reformat {
 #chr3DL_BAC_00000198	exonerate:est2genome	exon	290049	290776	.	-	.	ID=exon000000050;Parent=gene000000007
 #chr3DL_BAC_00000198	exonerate:est2genome	exon	289690	289869	.	-	.	ID=exon000000051;Parent=gene000000007
 #chr3DL_BAC_00000198	exonerate:est2genome	exon	289301	289402	.	-	.
-
-
 #CDS
 ##gff-version 3
 #chr3DL_BAC_00000198	exonerate:est2genome	gene	288095	290366	5360	-	.	ID=gene000000005;Name=ctg00006_019_O17.flt500_scaffold_1_6000-9700.gene.trans0001
@@ -1740,6 +1739,9 @@ sub ExonerateGff3Reformat {
 #chr3DL_BAC_00000198	exonerate:est2genome	exon	289301	289402	.	-	.
 #my $GRSsubinfo='SUB(GffKit::GffReverseStrand)';
 #my $GffKit_success=1; $GffKit_failure=0; $GffKit_debug=0;
+
+
+
 
 
 
