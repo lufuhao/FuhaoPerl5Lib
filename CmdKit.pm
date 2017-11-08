@@ -30,6 +30,7 @@ Perl Modules:
     * Return: 1=Success    0=Failure
 
 =item CanRun("$cmd")
+
     * Test a external cmd exists in PATH
     * Dependency: File::Which
     * Return: 1=Success    0=Failure
@@ -66,7 +67,7 @@ use warnings;
 use Exporter;
 use File::Which;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20161103';
+$VERSION     = '20171108';
 @ISA         = qw(Exporter);
 @EXPORT      = qw(CurrentTime exec_cmd exec_cmd_return CanRun);
 @EXPORT_OK   = qw();

@@ -10,11 +10,29 @@ File operations
 
 =head1 Requirements
 
-Cwd
+    Cwd
+    File::Copy
 
 =head1 DESCRIPTION
 
-CloseHandlerIfOpen( filehandlers )
+=over 4
+
+=item  AddFilePath($file1, $file2)
+
+    * Get the full path/basename for a list of files
+    * Return: @=($full_path_file1, $full_path_file2...)
+
+=item  CloseHandlerIfOpen( *FileHandler1, *FileHandler2 )
+
+    * Close a list of File handlers if it's open
+    * Return: 1=success, 0=failure
+
+=item  DeletePath($path);
+
+    * Delete Path and its its content
+    * Return: 1=Success, 0=Failure
+
+=back
 
 =head1 FEEDBACK
 
@@ -46,7 +64,7 @@ use warnings;
 use Exporter;
 use File::Copy;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20160805';
+$VERSION     = '20171108';
 @ISA         = qw(Exporter);
 @EXPORT      = qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath MoveFile CopyFile MergeFiles SubsetExtraction);
 @EXPORT_OK   = qw();
@@ -73,11 +91,11 @@ sub CloseHandlerIfOpen {
 		if (defined fileno($CHIOindv_handler)) {
 			unless (close $CHIOindv_handler) {
 				print STDERR "${CHIOsubinfo}Error: can not close filehandle for $CHIOindv_handler\n";
-				return 0;
+				return $FileKit_failure;
 			}
 		}
 	}
-	return 1;
+	return $FileKit_success;
 }
 
 

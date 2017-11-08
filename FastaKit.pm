@@ -173,6 +173,8 @@ CheckFastaIdDup
 RunEmbossStretcher
 AnalysisEmbossStretcherOutput
 
+=back
+
 =head1 FEEDBACK
 
 =head2 Support
@@ -208,7 +210,7 @@ use FuhaoPerl5Lib::CmdKit;
 use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
 use Bio::SeqIO;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20170303';
+$VERSION     = '20171108';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength);
