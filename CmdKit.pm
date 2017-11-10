@@ -25,8 +25,9 @@ Perl Modules:
 
     * Return: 1=Success    0=Failure
 
-=item exec_cmd_return ("$cmd")
+=item exec_cmd_return ("$cmd", $test1[1/0])
 
+    * $test1=1/0: (1=print 0=NOT print) detail when $cmd succeeds
     * Return: 1=Success    0=Failure
 
 =item CanRun("$cmd")
@@ -67,7 +68,7 @@ use warnings;
 use Exporter;
 use File::Which;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20171108';
+$VERSION     = '20171110';
 @ISA         = qw(Exporter);
 @EXPORT      = qw(CurrentTime exec_cmd exec_cmd_return CanRun);
 @EXPORT_OK   = qw();
@@ -127,13 +128,17 @@ sub exec_cmd {
 
 
 ### Process command
-### &exec_cmd(cmd)
+### &exec_cmd($cmd, $test1[1/0])
+### $test1=1/0: (1=print 0=NOT print) detail when $cmd succeeds
 ### Global:
 ### Dependency: time (Linux), &CurrentTime
 ### Note:
 sub exec_cmd_return {
-	my ($cmd) = @_;
-	print "##### CMD Starts\n".&CurrentTime()."CMD: $cmd\n";# if ($CmdKit_debug);
+	my ($cmd, $print_detail_if_success) = @_;
+	
+	$print_detail_if_success=0 unless (defined $print_detail_if_success);
+	
+	print "##### CMD Starts\n".&CurrentTime()."CMD: $cmd\n" if ($print_detail_if_success);
 	my $start_time = time();
 	my $return_code = system($cmd);
 	my $end_time = time();
@@ -142,7 +147,7 @@ sub exec_cmd_return {
 		return $CmdKit_failure;
 	}
 	else {
-		print STDERR "Finished command: $cmd\tat ".&CurrentTime()."\nRunning time:(".($end_time - $start_time)." seconds) with Returncode: $return_code\n##### CMDEnds\n";# if ($CmdKit_debug);
+		print STDERR "Finished command: $cmd\tat ".&CurrentTime()."\nRunning time:(".($end_time - $start_time)." seconds) with Returncode: $return_code\n##### CMDEnds\n" if ($print_detail_if_success);
 		return $CmdKit_success;
 	}
 }

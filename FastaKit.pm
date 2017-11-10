@@ -60,12 +60,20 @@ Fasta -related tools
 =item ExtractFastaSamtools ($input.fa, $out.fa, $fasta_id_file, [path_samtools])
 
     * Extract fasta sequences using a file containing a list of IDs, 1 ID perl line
+    * For a short list only
     * Dependancy: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
     * Return: 1=Success    0=Failure
 
 =item ExtractFastaSamtoolsID ($input.fa, $out.fa, "id1 id2", [path_samtools])
 
     * Extract fasta sequences using s string of IDs
+    * Dependancy: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
+    * Return: 1=Success    0=Failure
+
+=item ExtractFastaSamtoolsList ($input.fa, $out.fa, $fasta_id_file, [path_samtools])
+
+    * Extract fasta sequences using a file containing a list of IDs, 1 ID perl line
+    * Support long list
     * Dependancy: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
     * Return: 1=Success    0=Failure
 
@@ -210,12 +218,12 @@ use FuhaoPerl5Lib::CmdKit;
 use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
 use Bio::SeqIO;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20171108';
+$VERSION     = '20171109';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength);
-%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength)],
-                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList);
+%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList)],
+                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -472,6 +480,69 @@ sub ExtractFastaSamtools {
 	}
 	unless (-s $EFSoutputfa) {
 		print STDERR $EFSsubinfo, "Error: samtools extract fasta output error: $EFSoutputfa\n";
+		return $FastaKit_failure;
+	}
+	return $FastaKit_success;
+}
+
+
+
+
+
+### Extract fasta sequences using a file containing a list of IDs, 1 ID perl line
+### &ExtractFastaSamtools(my.fa, output.fa, fasta_id_file, [path_samtools]);
+### Return: 0=fail; 1=success
+### Global:
+### Dependancy: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
+### Note: 
+sub ExtractFastaSamtoolsList {
+	my ($EFSLinputfa, $EFSLoutputfa, $EFSLidlist, $EFSLpath_samtools)=@_;
+	
+	my $EFSLsubinfo='SUB(FastaKit::ExtractFastaSamtoolsList)';
+	$EFSLpath_samtools='samtools' unless (defined $EFSLpath_samtools);
+	local *EFSLLIST; local *EFSLOUTPUT;
+	
+	unless (defined $EFSLinputfa and -s $EFSLinputfa) {
+		print STDERR $EFSLsubinfo, "Error: invalid input fasta file: $EFSLinputfa\n";
+		return $FastaKit_failure;
+	}
+	unless (-s "$EFSLinputfa.fai") {
+		unless (&IndexFasta($EFSLinputfa, $EFSLpath_samtools)) {
+			print STDERR $EFSLsubinfo, "Error: unable to index fasta file: $EFSLinputfa\n";
+			return $FastaKit_failure;
+		}
+	}
+	unless (defined $EFSLidlist and -s $EFSLidlist) {
+		print STDERR $EFSLsubinfo, "Error: invalid fasta ID list file: $EFSLidlist\n";
+		return $FastaKit_failure;
+	}
+	unless (defined $EFSLoutputfa and $EFSLoutputfa=~/^\S+$/) {
+		print STDERR $EFSLsubinfo, "Error: invalid output fasta file: $EFSLoutputfa\n";
+		return $FastaKit_failure;
+	}
+	unlink $EFSLoutputfa if (-e $EFSLoutputfa);
+	
+	close EFSLLIST if (defined fileno(EFSLLIST));
+	unless (open (EFSLLIST, " < $EFSLidlist ")) {
+		print STDERR $EFSLsubinfo, "Error: open list file error\n";
+		return $FastaKit_failure;
+	}
+#	close EFSLOUTPUT if(defined fileno(EFSLOUTPUT));
+#	unless (open (EFSLOUTPUT, " > $EFSLoutputfa")) {
+#		print STDERR $EFSLsubinfo, "Error: can not write output fasta\n";
+#		return $FastaKit_failure;
+#	}
+	while (my $EFSLline=<EFSLLIST>) {
+		chomp $EFSLline;
+		unless (exec_cmd_return("$EFSLpath_samtools faidx $EFSLinputfa $EFSLline >> $EFSLoutputfa")) {
+			print STDERR $EFSLsubinfo, "Error: samtools extract fasta running error: $EFSLline\n";
+			return $FastaKit_failure;
+		}
+	}
+	
+#	close EFSLLIST;
+	unless (-s $EFSLoutputfa) {
+		print STDERR $EFSLsubinfo, "Error: samtools extract fasta output error: $EFSLoutputfa\n";
 		return $FastaKit_failure;
 	}
 	return $FastaKit_success;

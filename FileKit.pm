@@ -20,16 +20,28 @@ File operations
 =item  AddFilePath($file1, $file2)
 
     * Get the full path/basename for a list of files
-    * Return: @=($full_path_file1, $full_path_file2...)
+    * Return: $full_name for single file
+              @=($full_path_file1, $full_path_file2...) for a list file
 
 =item  CloseHandlerIfOpen( *FileHandler1, *FileHandler2 )
 
     * Close a list of File handlers if it's open
     * Return: 1=success, 0=failure
 
+=item  CountLines($file)
+
+    * Count file lines
+    * Return: INT: >0 lines; 0= invalid/empty file
+
 =item  DeletePath($path);
 
     * Delete Path and its its content
+    * Return: 1=Success, 0=Failure
+
+
+=item  MergeFiles ($out, $in1, $in2, ...)
+
+    * Merge >=1 file to 1
     * Return: 1=Success, 0=Failure
 
 =back
@@ -66,10 +78,10 @@ use File::Copy;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20171108';
 @ISA         = qw(Exporter);
-@EXPORT      = qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath MoveFile CopyFile MergeFiles SubsetExtraction);
+@EXPORT      = qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath MoveFile CopyFile MergeFiles SubsetExtraction CountLines);
 @EXPORT_OK   = qw();
-%EXPORT_TAGS = ( DEFAULT => [qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath &MoveFile CopyFile MergeFiles SubsetExtraction)],
-                 ALL    => [qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath &MoveFile CopyFile MergeFiles SubsetExtraction)]);
+%EXPORT_TAGS = ( DEFAULT => [qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath &MoveFile CopyFile MergeFiles SubsetExtraction CountLines)],
+                 ALL    => [qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath &MoveFile CopyFile MergeFiles SubsetExtraction CountLines)]);
 
 
 my $FileKit_success=1;
@@ -111,7 +123,13 @@ sub AddFilePath {
 	foreach (@AFPfiles) {
 		$_=realpath($_);
 	}
-	return (@AFPfiles);
+	
+	if (scalar(@AFPfiles)==1) {
+		return $AFPfiles[0];
+	}
+	else {
+		return (@AFPfiles);
+	}
 }
 
 
@@ -258,8 +276,8 @@ sub CopyFile {
 
 
 
-###
-### MergeFiles
+### Merge >=1 file to 1
+### MergeFiles ($out, $in1, $in2, ...)
 ### Global: 
 ### Dependency: $FileKit_success;$FileKit_failure;
 ### Note:
@@ -376,4 +394,33 @@ sub SubsetExtraction {
 
 
 
+### Count line
+sub CountLines {
+	my $CLfile=shift;
+	
+	my $CLsubinfo="SUB(FileKit::CountLines)";
+	local *CLFILEIN;
+	my $CLlines=0;
+	
+	unless (defined $CLfile and -s $CLfile) {
+		print STDERR $CLsubinfo, "Error: invalid file\n";
+		return $FileKit_failure;
+	}
+	
+	close CLFILEIN if(defined fileno(CLFILEIN));
+	unless (open CLFILEIN, "< $CLfile ") {
+		print STDERR $CLsubinfo, "Error: failed to open file: $CLfile\n";
+		return $FileKit_failure;
+	}
+	while (<CLFILEIN>) {
+		$CLlines++;
+	}
+	close CLFILEIN;
+	
+	return $CLlines;
+}
+
+
+
+#$FileKit_success; $FileKit_failure;
 1;
