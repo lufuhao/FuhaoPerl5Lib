@@ -11,13 +11,21 @@ Fasta -related tools
 =head1 Requirements
 
     Bio::SeqIO
-    FuhaoPerl5Lib::FileKit qw/MoveFile RetrieveDir MergeFiles/;
+    FuhaoPerl5Lib::FileKit qw/MoveFile RetrieveDir MergeFiles RetrieveBasename/;
     FuhaoPerl5Lib::CmdKit;
     FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
 
 =head1 DESCRIPTION
 
 =over 4
+
+=item AnalyzeMummerShowcoords($show_coords_out)
+
+    * Makeing a seq backbone for scaffolding based on MUMmer result
+    * Input is MUMmmer show-coords out (space-delimited)
+    * Return: (0/1, \%hash)
+    *        1=Success    0=Failure
+    *        %hash=($groupnumber, $seq1_strand, $seq1:start-end, $seq2_strand, $seq2:start-end, ....)
 
 =item CdbFasta (fasta_file, [path_cdbfasta])
 
@@ -57,16 +65,10 @@ Fasta -related tools
     * Dependency: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
     * Return: 1=Success    0=Failure
 
-=item ExtractFastaSamtools ($input.fa, $out.fa, $fasta_id_file, [path_samtools])
-
-    * Extract fasta sequences using a file containing a list of IDs, 1 ID perl line
-    * For a short list only
-    * Dependancy: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
-    * Return: 1=Success    0=Failure
-
 =item ExtractFastaSamtoolsID ($input.fa, $out.fa, "id1 id2", [path_samtools])
 
     * Extract fasta sequences using s string of IDs
+    * Note: be careful id ID contains special characters, like |
     * Dependancy: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
     * Return: 1=Success    0=Failure
 
@@ -174,7 +176,15 @@ Fasta -related tools
     * Split Fasta file into several files by number of sequence
     * Return: (1/0, \@arr(filenames))
 
+=item SspaceOutRenamer($in.fa[.gz], [$out.fa[.gz]], [$seqID_base], [$seqID_prefix], [$seqID_suffix])
 
+    * Rename sspace-scaffolded fasta to a standard format
+    * Require: gzip, zcat if gzipped format in/out
+    * Default: out.fa = $input_basename.rename-fa
+               $seqID_base = '000000001'
+               $seqID_prefix = 'MergedScaffold_'
+               $suffix =''
+    * Return: 1=Success    0=failure
 
 Codon2AA CountFasta
 CheckFastaIdDup
@@ -206,6 +216,15 @@ Fight against Bioinformatics with Perl ^_^
 
 =cut
 
+
+#=item ExtractFastaSamtools ($input.fa, $out.fa, $fasta_id_file, [path_samtools])
+#
+#    * Extract fasta sequences using a file containing a list of IDs, 1 ID perl line
+#    * For a short list only
+#    * Dependancy: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
+#    * Return: 1=Success    0=Failure
+
+
 #Coding starts
 package FuhaoPerl5Lib::FastaKit;
 use strict;
@@ -218,12 +237,12 @@ use FuhaoPerl5Lib::CmdKit;
 use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
 use Bio::SeqIO;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20171109';
+$VERSION     = '20171127';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList);
-%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList)],
-                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtools IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords);
+%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords)],
+                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -448,7 +467,7 @@ sub CdbYankFromFile {
 ### Global:
 ### Dependancy: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
 ### Note: 
-sub ExtractFastaSamtools {
+sub ExtractFastaSamtools {### OLD
 	my ($EFSinputfa, $EFSoutputfa, $EFSidlist, $EFSpath_samtools)=@_;
 	
 	my $EFSsubinfo='SUB(FastaKit::ExtractFastaSamtools)';
@@ -473,7 +492,8 @@ sub ExtractFastaSamtools {
 		return $FastaKit_failure;
 	}
 	unlink $EFSoutputfa if (-e $EFSoutputfa);
-	
+
+### problematic
 	unless (exec_cmd_return("$EFSpath_samtools faidx $EFSinputfa `cat $EFSidlist` > $EFSoutputfa")) {
 		print STDERR $EFSsubinfo, "Error: samtools extract fasta running error\n";
 		return $FastaKit_failure;
@@ -482,6 +502,7 @@ sub ExtractFastaSamtools {
 		print STDERR $EFSsubinfo, "Error: samtools extract fasta output error: $EFSoutputfa\n";
 		return $FastaKit_failure;
 	}
+
 	return $FastaKit_success;
 }
 
@@ -534,7 +555,7 @@ sub ExtractFastaSamtoolsList {
 #	}
 	while (my $EFSLline=<EFSLLIST>) {
 		chomp $EFSLline;
-		unless (exec_cmd_return("$EFSLpath_samtools faidx $EFSLinputfa $EFSLline >> $EFSLoutputfa")) {
+		unless (exec_cmd_return("$EFSLpath_samtools faidx $EFSLinputfa ¡®$EFSLline¡¯ >> $EFSLoutputfa")) {
 			print STDERR $EFSLsubinfo, "Error: samtools extract fasta running error: $EFSLline\n";
 			return $FastaKit_failure;
 		}
@@ -2031,10 +2052,485 @@ sub ReadFastaLength {
 
 
 
+### Rename sspace-scaffolded fasta to a standard format
+### SspaceOutRenamer($fastain[fa/gz], $fastaut[$basename.rename.fa[.gz]], $base [000000001], $prefix [MergedScaffold_], $suffix[''])
+### Global: zcat, gzip
+### Dependency:
+### Note: 
+sub SspaceOutRenamer {
+	my ($SORfastain, $SORfastaout, $SORbase, $SORprefix, $SORsuffix)=@_;
 
+	my $SORsubinfo='SUB(FastaKit::SspaceOutRenamer)';
+	unless (defined $SORfastaout) {
+		$SORfastaout=RetrieveBasename($SORfastain).'.rename.fa';
+	}
+	$SORprefix="MergedScaffold_" unless (defined $SORprefix);
+	$SORsuffix='' unless (defined $SORsuffix);
+	$SORbase='000000001' unless (defined $SORbase);
+	local *SORFASTAIN; local *SORFASTAOUT;
+	
+	unless (defined $SORfastain and -s $SORfastain) {
+		print STDERR $SORsubinfo, "Error: invalid fasta input\n";
+		return $FastaKit_failure;
+	}
+
+	close SORFASTAIN if (defined fileno(SORFASTAIN));
+	if ($SORfastain=~/(\.fa\.gz$)|(\.fas\.gz$)|(\.fasta.gz$)/i) {
+		print STDERR $SORsubinfo, "Info: fasta input in gzipped fasta: $SORfastain\n";
+		unless (open SORFASTAIN, " zcat $SORfastain | ") {
+			print STDERR $SORsubinfo, "Error: can not open gzipped fasta input: $SORfastain\n";
+			return $FastaKit_failure;
+		}
+	}
+	elsif ($SORfastain=~/(\.fa$)|(\.fas$)|(\.fasta$)/i) {
+		print STDERR $SORsubinfo, "Info: fasta input in flat fasta: $SORfastain\n";
+		unless (open SORFASTAIN, " < $SORfastain ") {
+			print STDERR $SORsubinfo, "Error: can not open flat fasta input: $SORfastain\n";
+			return $FastaKit_failure;
+		}
+	}
+	else {
+		print STDERR $SORsubinfo, "Info: can not guess input format: $SORfastain\n";
+		return $FastaKit_failure;
+	}
+	close SORFASTAOUT if (defined fileno(SORFASTAOUT));
+	if ($SORfastaout=~/(\.fa\.gz$)|(\.fas\.gz$)|(\.fasta.gz$)/i) {
+		print STDERR $SORsubinfo, "Info: fasta output in gzipped fasta: $SORfastaout\n";
+		unless (open SORFASTAOUT, " | gzip -9 > $SORfastaout") {
+			print STDERR $SORsubinfo, "Error: can not write gzipped fasta output: $SORfastaout\n";
+			return $FastaKit_failure;
+		}
+	}
+	elsif ($SORfastaout=~/(\.fa$)|(\.fas$)|(\.fasta$)/i) {
+		print STDERR $SORsubinfo, "Info: fasta output in flat fasta: $SORfastaout\n";
+		unless (open SORFASTAOUT, " > $SORfastaout ") {
+			print STDERR $SORsubinfo, "Error: can not write flat fasta output: $SORfastaout\n";
+			return $FastaKit_failure;
+		}
+	}
+	else {
+		print STDERR $SORsubinfo, "Info: can not guess output format: $SORfastaout\n";
+		return $FastaKit_failure;
+	}
+	while (my $SORline=<SORFASTAIN>) {
+#>scaffold1|size555703
+		if ($SORline=~/^>scaffold\d+\|size\d+/) {
+			chomp $SORline;
+			$SORline=~s/^>//;
+			print $SORline, "\t";
+			my $SORnewname=$SORprefix.$SORbase.$SORsuffix;
+			print $SORnewname, "\n";
+			print SORFASTAOUT '>'.$SORnewname.' '.$SORline, "\n";
+			$SORbase++;
+		}
+		else {
+			print SORFASTAOUT $SORline, "\n";
+		}
+	}
+	
+	close SORFASTAIN;
+	close SORFASTAOUT;
+	return $FastaKit_success
+}
+
+
+
+
+
+### Analysis show-coords result for further scaffolding
+
+### Example
+###                        1          12              28        38
+### REF                    aaaaaaaaaaaaTTTTTTTTTTTTTTTggggggggggg
+### QRY      CCCCCCCCCCCCCCaaaaaaaaaaaa
+###          1            14
+### QRY2                                              gggggggggggAAAAAAAAAAAA
+###                                                              12         23
+###Return \%hash={$groupnum => [QRYstrand, QRY:1-14, REFstrand, REF:1-38, QRY2strand, QRY2:12-23}
+
+sub AnalyzeMummerShowcoords {
+	my ($AMSshow_coords_out)=shift;
+
+	my $AMSsubinfo='SUB(FastaKit::AnalyzeMummerShowcoords)';
+	my %AMSrefs=();
+	my %AMSqrys=();
+	my %AMSalignment=();
+	local *AMSINPUT;
+	my $AMSuse_most_strand=1;
+	my %AMSusedrefs=();
+	my %AMSusedqrys=();
+	my $AMSmin_perc=0;
+	my $AMSmin_len=0;
+	my $AMSgroupnum=0;
+	my %AMSseq2num=();
+	my %AMSnum2seq=();
+	my %AMSseqlen=();
+	my %AMSret_hash=();
+
+	unless (defined $AMSshow_coords_out and -s $AMSshow_coords_out) {
+		print STDERR $AMSsubinfo, "Error: invalid input\n";
+		return $FastaKit_failure;
+	}
+
+	close AMSINPUT if(defined fileno(AMSINPUT));
+#[S1]    [E1]    [S2]    [E2]    [LEN 1] [LEN 2] [% IDY] [LEN R] [LEN Q] [COV R] [COV Q] [TAGS]
+#1       6850    95856   89010   6850    6847    99.87   162893  102105  4.21    6.71    NMPL02000078.1  ctg00052_109_E14.flt500_scaffold_1
+#3810    6982    3173    1       3173    3173    99.62   162893  59328   1.95    5.35    NMPL02000078.1  ctg00052_001_D08.flt500_scaffold_1
+#7003    32331   88983   63663   25329   25321   99.03   162893  102105  15.55   24.80   NMPL02000078.1  ctg00052_109_E14.flt500_scaffold_1
+#36207   59164   6554    29516   22958   22963   99.70   162893  29516   14.09   77.80   NMPL02000078.1  ctg00109_074_B16.flt500_scaffold_1
+#55891   59178   124573  127872  3288    3300    99.12   162893  139267  2.02    2.37    NMPL02000078.1  ctg00052_011_A17.flt500_scaffold_1
+	unless (open AMSINPUT, "< $AMSshow_coords_out") {
+		print STDERR $AMSsubinfo, "Error: failed to open input: $AMSshow_coords_out\n";
+		return $FastaKit_failure;
+	}
+	<AMSINPUT>;<AMSINPUT>;<AMSINPUT>;
+	my $AMSline=<AMSINPUT>;
+	my @AMStemparr=split(/\t/, $AMSline);
+	my ($AMSlenRcol, $AMSlenQcol, $AMSrefcol, $AMSqrycol)=(-1, -1, -1, -1);
+	for (my $AMSlabel=0; $AMSlabel<scalar (@AMStemparr); $AMSlabel++) {
+		if ($AMStemparr[$AMSlabel]=~/^\[LEN\s+R\]$/) {$AMSlenRcol=$AMSlabel;next;}
+		if ($AMStemparr[$AMSlabel]=~/^\[LEN\s+Q\]$/) {$AMSlenQcol=$AMSlabel;next;}
+		if ($AMStemparr[$AMSlabel]=~/^\[TAGS\]$/) {$AMSrefcol=$AMSlabel;next;}
+	}
+	unless ($AMSlenRcol>0) {
+		print STDERR $AMSsubinfo, "Error: can not detect [LEN R] column number\n$AMSline\n";
+		print STDERR $AMSsubinfo, "Info: please run shw-coords with -l option\n";
+		return $FastaKit_failure;
+	} 
+	unless ($AMSlenQcol>0) {
+		print STDERR $AMSsubinfo, "Error: can not detect [LEN Q] column number\n$AMSline\n";
+		print STDERR $AMSsubinfo, "Info: please run shw-coords with -l option\n";
+		return $FastaKit_failure;
+	}
+	unless ($AMSrefcol>0) {
+		print STDERR $AMSsubinfo, "Error: can not detect [TAGS] column number\n$AMSline\n";
+		return $FastaKit_failure;
+	}
+	$AMSqrycol=$AMSrefcol+1;
+	unless ($AMSqrycol>0) {
+		print STDERR $AMSsubinfo, "Error: can not detect [TAGS] query column number\n$AMSline\n";
+		return $FastaKit_failure;
+	}
+	my $AMSlinenum=4;
+	while ($AMSline=<AMSINPUT>) {
+		chomp $AMSline;
+		$AMSlinenum++;
+		my @AMSarr=split(/\s+/, $AMSline);
+
+#[S1]		$AMSarr[0]
+#[E1]		$AMSarr[1]
+#[S2]		$AMSarr[2]
+#[E2]		$AMSarr[3]
+#[LEN 1]	$AMSarr[4]
+#[LEN 2]	$AMSarr[5]
+#[% IDY]	$AMSarr[6]
+#[LEN R]	$AMSarr[7]
+#[LEN Q]	$AMSarr[8]
+#[COV R]	$AMSarr[9]
+#[COV Q]	$AMSarr[10]
+#[REF1]		$AMSarr[11]
+#[QRY2]		$AMSarr[12]
+
+		my $AMSstrand=0; ### 0=same; 1=reverse
+		my ($AMSrfnstart, $AMSrfnend, $AMSqrystart, $AMSqryend); 
+		if ($AMSarr[0]<$AMSarr[1] and $AMSarr[2]<$AMSarr[3]) {
+			$AMSrfnstart=$AMSarr[0]; $AMSrfnend=$AMSarr[1];
+			$AMSqrystart=$AMSarr[2]; $AMSqryend=$AMSarr[3];
+			$AMSstrand=0;
+		}
+		elsif ($AMSarr[0]>$AMSarr[1] and $AMSarr[2]>$AMSarr[3]) {
+			$AMSrfnstart=$AMSarr[1]; $AMSrfnend=$AMSarr[0];
+			$AMSqrystart=$AMSarr[3]; $AMSqryend=$AMSarr[2];
+			$AMSstrand=0;
+		}
+		elsif ($AMSarr[0]<$AMSarr[1] and $AMSarr[2]>$AMSarr[3]) {
+			$AMSrfnstart=$AMSarr[0]; $AMSrfnend=$AMSarr[1];
+			$AMSqrystart=$AMSarr[3]; $AMSqryend=$AMSarr[2];
+			$AMSstrand=1;
+		}
+		elsif ($AMSarr[0]>$AMSarr[1] and $AMSarr[2]<$AMSarr[3]) {
+			$AMSrfnstart=$AMSarr[1]; $AMSrfnend=$AMSarr[0];
+			$AMSqrystart=$AMSarr[2]; $AMSqryend=$AMSarr[3];
+			$AMSstrand=1;
+		}
+		else {
+			print STDERR $AMSsubinfo, "Error: invalid line($AMSlinenum): $AMSline\n";
+			return $FastaKit_failure;
+		}
+		if (exists $AMSseqlen{$AMSarr[$AMSrefcol]}) {
+			unless ($AMSseqlen{$AMSarr[$AMSrefcol]}==$AMSarr[$AMSlenRcol]) {
+				print STDERR $AMSsubinfo, "Error: inconsistent ref length line($AMSlinenum): $AMSline\n";
+				return $FastaKit_failure;
+			}
+		}
+		else {
+			$AMSseqlen{$AMSarr[$AMSrefcol]}=$AMSarr[$AMSlenRcol];
+		}
+		if (exists $AMSseqlen{$AMSarr[$AMSqrycol]}) {
+			unless ($AMSseqlen{$AMSarr[$AMSqrycol]}==$AMSarr[$AMSlenQcol]) {
+				print STDERR $AMSsubinfo, "Error: inconsistent query length line($AMSlinenum): $AMSline\n";
+				return $FastaKit_failure;
+			}
+		}
+		else {
+			$AMSseqlen{$AMSarr[$AMSqrycol]}=$AMSarr[$AMSlenQcol];
+		}
+		@{$AMSalignment{$AMSarr[$AMSrefcol]}{$AMSarr[$AMSqrycol]}{$AMSlinenum}}=($AMSstrand, $AMSrfnstart, $AMSrfnend, $AMSqrystart, $AMSqryend);
+		@{$AMSalignment{$AMSarr[$AMSqrycol]}{$AMSarr[$AMSrefcol]}{$AMSlinenum}}=($AMSstrand, $AMSqrystart, $AMSqryend, $AMSrfnstart, $AMSrfnend);
+
+		$AMSrefs{$AMSarr[$AMSrefcol]}++;
+		$AMSqrys{$AMSarr[$AMSqrycol]}++;
+	}
+	close AMSINPUT;
+	if (0) {### for test ###
+		print $AMSsubinfo, "Test: \%AMSalignment\n";
+		print Dumper \%AMSalignment;
+		print "\n";
+	}
+	if (0) {### for test ###
+		print $AMSsubinfo, "Test: \%AMSseqlen\n";
+		print Dumper \%AMSseqlen;
+		print "\n";
+	}
+
+### Group all the linkable reference to a group
+	foreach my $AMSindref1 (keys %AMSrefs) {
+		$AMSseq2num{$AMSindref1}=$AMSgroupnum++;
+	}
+	foreach my $AMSindref1 (keys %AMSrefs) {
+		my @AMSarrnum=();
+		push @AMSarrnum, $AMSseq2num{$AMSindref1};
+		foreach my $AMSindqry (keys %{$AMSalignment{$AMSindref1}}) {
+			if (exists $AMSseq2num{$AMSindqry}) {
+				push @AMSarrnum, $AMSseq2num{$AMSindqry};
+			}
+			foreach my $AMSindref2 (keys %{$AMSalignment{$AMSindqry}}) {
+				push @AMSarrnum, $AMSseq2num{$AMSindref2};
+			}
+		}
+		### Get the minimal group number
+		@AMSarrnum=sort {$a <=> $b} @AMSarrnum;
+		unless (scalar(@AMSarrnum)>0) {
+			print STDERR $AMSsubinfo, "Error: unassign group: REF $AMSindref1\n";
+			return $FastaKit_failure;
+		}
+		my $AMDminnum=shift @AMSarrnum;
+		unless ($AMDminnum=~/^\d+$/) {
+			print STDERR $AMSsubinfo, "Error: invalid group number: REF $AMSindref1\n";
+			return $FastaKit_failure;
+		}
+		### Apply all to this minimal group number
+		$AMSseq2num{$AMSindref1}=$AMDminnum;
+		foreach my $AMSindqry (keys %{$AMSalignment{$AMSindref1}}) {
+			$AMSseq2num{$AMSindqry}=$AMDminnum;
+			foreach my $AMSindref2 (keys %{$AMSalignment{$AMSindqry}}) {
+				$AMSseq2num{$AMSindref2}=$AMDminnum;
+			}
+		}
+		foreach my $AMSseqid (keys %AMSseq2num) {
+			foreach (@AMSarrnum) {
+				$AMSseq2num{$AMSseqid}=$AMDminnum if ($AMSseq2num{$AMSseqid}==$_);
+			}
+		}
+	}
+	foreach my $AMSindref1 (keys %AMSseq2num) {
+		$AMSnum2seq{$AMSseq2num{$AMSindref1}}{$AMSindref1}++;
+	}
+	if (0) {
+		print $AMSsubinfo, "Test: Grouped sequences\n";
+		print Dumper \%AMSseq2num;
+		print "\n";
+	}
+	if (0) {
+		print $AMSsubinfo, "Test: Grouped sequences\n";
+		print Dumper \%AMSnum2seq;
+		print "\n";
+	}
+
+### overlap for each group
+	foreach my $AMSgroup (sort {$a<=>$b} keys %AMSnum2seq) {
+		my %AMSbackbone=();
+		my @AMSrefseqs=();
+		my @AMSqryseqs=();
+		my %AMSarrange=();
+		foreach my $AMSindseq (keys %{$AMSnum2seq{$AMSgroup}}) {
+#			print "Num: $AMSgroup, ref $AMSindseq\n";### For test ###
+			push (@AMSrefseqs, $AMSindseq) if (exists $AMSrefs{$AMSindseq});
+			push (@AMSqryseqs, $AMSindseq) if (exists $AMSqrys{$AMSindseq});
+		}
+#		print "REFs: @AMSrefseqs\n";### For test ###
+#		print "QRYs: @AMSqryseqs\n";### For test ###
+		foreach my $AMSindref2 (@AMSrefseqs) {
+			unless (exists $AMSseqlen{$AMSindref2}) {
+				print STDERR $AMSsubinfo, "Error: unknown ref length: REF $AMSindref2\n";
+				return $FastaKit_failure;
+			}
+			foreach my $AMSindqry (keys %{$AMSalignment{$AMSindref2}}) {
+				unless (exists $AMSseqlen{$AMSindqry}) {
+					print STDERR $AMSsubinfo, "Error: unknown query length: QRY $AMSindqry\n";
+					return $FastaKit_failure;
+				}
+				my %AMSindstrand=();
+				my $AMSfinalstrand='';
+				my @AMSrefarray=();
+				my @AMSqryarray=();
+				foreach (keys %{$AMSalignment{$AMSindref2}{$AMSindqry}}) {
+					my $AMSalignlen=abs($AMSalignment{$AMSindref2}{$AMSindqry}{$_}[2]-$AMSalignment{$AMSindref2}{$AMSindqry}{$_}[1])+1;
+					push @AMSrefarray, $AMSalignment{$AMSindref2}{$AMSindqry}{$_}[1];
+					push @AMSrefarray, $AMSalignment{$AMSindref2}{$AMSindqry}{$_}[2];
+					push @AMSqryarray, $AMSalignment{$AMSindref2}{$AMSindqry}{$_}[3];
+					push @AMSqryarray, $AMSalignment{$AMSindref2}{$AMSindqry}{$_}[4];
+					if ($AMSalignment{$AMSindref2}{$AMSindqry}{$_}[0]==0) {
+						$AMSindstrand{'0'}+=$AMSalignlen;
+					}
+					elsif($AMSalignment{$AMSindref2}{$AMSindqry}{$_}[0]==1) {
+						$AMSindstrand{'1'}+=$AMSalignlen;
+					}
+					else {
+						print STDERR $AMSsubinfo, "Error: unknown strand/1: REF $AMSindref2, QRY $AMSindqry\n";
+						print Dumper $AMSrefs{$AMSindref2}{$AMSindqry};
+						return $FastaKit_failure;
+					}
+				}
+				if (scalar(keys %AMSindstrand)==1) {
+					my @AMStemparrr2=keys %AMSindstrand;
+					$AMSfinalstrand=shift @AMStemparrr2;
+				}
+				elsif (scalar(keys %AMSindstrand)>1) {
+					if ($AMSuse_most_strand==1) {
+						if ($AMSindstrand{'0'}>$AMSindstrand{'1'}) {
+							$AMSfinalstrand=0;
+						}
+						elsif ($AMSindstrand{'1'}>$AMSindstrand{'0'}) {
+							$AMSfinalstrand=1;
+						}
+						else {
+							print STDERR $AMSsubinfo, "Error: unknown strand/2: REF $AMSindref2, QRY $AMSindqry\n";
+							print Dumper $AMSalignment{$AMSindref2}{$AMSindqry};
+							return $FastaKit_failure;
+						}
+					}
+					else {
+						print STDERR $AMSsubinfo, "Error: unknown strand/3: REF $AMSindref2, QRY $AMSindqry\n";
+						print Dumper $AMSalignment{$AMSindref2}{$AMSindqry};
+						return $FastaKit_failure;
+					}
+				}
+				else {
+					print STDERR $AMSsubinfo, "Error: unknown strand/4: REF $AMSindref2, QRY $AMSindqry\n";
+					print Dumper $AMSalignment{$AMSindref2}{$AMSindqry};
+					return $FastaKit_failure;
+				}
+				unless ($AMSfinalstrand=~/^(0)|(1)$/) {
+					print STDERR $AMSsubinfo, "Error: unknown strand/5: REF $AMSindref2, QRY $AMSindqry\n";
+					print Dumper $AMSalignment{$AMSindref2}{$AMSindqry};
+					return $FastaKit_failure;
+				}
+				
+				
+				@AMSrefarray=sort {$a<=>$b} @AMSrefarray;
+				@AMSqryarray=sort {$a<=>$b} @AMSqryarray;
+#				print "REF array: ", join (" / ", @AMSrefarray), "\n";### For test ###
+#				print "QRY array: ", join (" / ", @AMSqryarray), "\n";### For test ###
+				if ($AMSfinalstrand==0) {### query mapped to ref forward strand
+					@{$AMSarrange{$AMSindref2}{$AMSindqry}{'body'}}=($AMSindref2, '0', $AMSrefarray[0], $AMSrefarray[-1]);
+					if ($AMSqryarray[0]>1) {
+						@{$AMSarrange{$AMSindref2}{$AMSindqry}{'left'}}=($AMSindqry, '0', 1, $AMSqryarray[0]-1 );
+					}
+					if ($AMSqryarray[-1]<$AMSseqlen{$AMSindqry}) {
+						@{$AMSarrange{$AMSindref2}{$AMSindqry}{'right'}}=($AMSindqry, '0', $AMSqryarray[-1]+1, $AMSseqlen{$AMSindqry});
+					}
+					if (0) {### For test ###
+						my $AMSleftlength=$AMSqryarray[0]-$AMSrefarray[0];
+						my $AMSrightlength=($AMSseqlen{$AMSindqry}-$AMSqryarray[-1])-($AMSseqlen{$AMSindref2}-$AMSrefarray[-1]);
+						print "+Ref $AMSindref2 Qry $AMSindqry Left $AMSleftlength right $AMSrightlength\n";### For test ### 
+					}
+					
+				}
+				elsif ($AMSfinalstrand==1) {
+					@{$AMSarrange{$AMSindref2}{$AMSindqry}{'body'}}=($AMSindref2, '0', $AMSrefarray[0], $AMSrefarray[-1]);
+					if ($AMSqryarray[0]>1) {
+						@{$AMSarrange{$AMSindref2}{$AMSindqry}{'right'}}=($AMSindqry, '1', 1, $AMSqryarray[0]-1 );
+					}
+					if ($AMSqryarray[-1]<$AMSseqlen{$AMSindqry}) {
+						@{$AMSarrange{$AMSindref2}{$AMSindqry}{'left'}}=($AMSindqry, '1', $AMSqryarray[-1]+1, $AMSseqlen{$AMSindqry});
+					}
+					if (0) {### For test ###
+						my $AMSleftlength=($AMSseqlen{$AMSindqry}-$AMSqryarray[-1])-($AMSrefarray[0]-1);
+						my $AMSrightlength=($AMSqryarray[0]-1)-($AMSseqlen{$AMSindref2}-$AMSrefarray[-1]);
+						print "-Ref $AMSindref2 Qry $AMSindqry Left $AMSleftlength right $AMSrightlength\n";
+					}
+					 
+				}
+			}
+		}
+		if(0) {### For test ###
+			print "Test: \%AMSarrange\n";
+			print Dumper \%AMSarrange;
+			print "\n";
+		}
+		foreach my $AMSindref3 (keys %AMSarrange) {
+#			print "REF2: ", $AMSindref3, "\n";### For test ###
+			my @AMStemparr=();
+			my $AMSleftlen=0; my $AMSrightlen=0;
+			my $AMSleftscaf=$AMSindref3; my $AMSrightscaf=$AMSindref3;
+#			print "Ref: $AMSindref3\n";### For test ###
+			foreach my $AMSindqry (keys %{$AMSarrange{$AMSindref3}}) {
+				my $AMSlength_body_left=$AMSarrange{$AMSindref3}{$AMSindqry}{'body'}[2]-1;
+				my $AMSlength_body_right=$AMSseqlen{$AMSindref3}-$AMSarrange{$AMSindref3}{$AMSindqry}{'body'}[3];
+				if (exists $AMSarrange{$AMSindref3}{$AMSindqry}{'left'}) {
+					my $AMSlength_qry=$AMSarrange{$AMSindref3}{$AMSindqry}{'left'}[3]-$AMSarrange{$AMSindref3}{$AMSindqry}{'left'}[2]+1;
+					if (($AMSlength_qry - $AMSlength_body_left) > $AMSleftlen) {
+						$AMSleftscaf=$AMSarrange{$AMSindref3}{$AMSindqry}{'left'}[0];
+						$AMSleftlen=$AMSlength_qry - $AMSlength_body_left;
+					}
+				}
+				if (exists $AMSarrange{$AMSindref3}{$AMSindqry}{'right'}) {
+					my $AMSlength_qry=$AMSarrange{$AMSindref3}{$AMSindqry}{'right'}[3]-$AMSarrange{$AMSindref3}{$AMSindqry}{'right'}[2]+1;
+					if (($AMSlength_qry - $AMSlength_body_right) > $AMSrightlen) {
+						$AMSrightscaf=$AMSarrange{$AMSindref3}{$AMSindqry}{'right'}[0];
+						$AMSrightlen=$AMSlength_qry - $AMSlength_body_right;
+					}
+				}
+				if (1) {### For test ###
+					print "\tQuery: $AMSindqry\n";
+					print "\t\tBODY: $AMSindref3;\n";print "\t\tLEFT: $AMSleftscaf;\n";print "\t\tRight: $AMSrightscaf\n";
+				}
+				
+			}
+			if(0) {### For test ###
+				print "BODY: $AMSindref3;\n";print "LEFT: $AMSleftscaf;\n";print "Right: $AMSrightscaf\n";
+			}
+			if (($AMSleftscaf eq $AMSindref3) and ($AMSrightscaf eq $AMSindref3)) {
+				@{$AMSret_hash{$AMSgroup}}=(0, $AMSindref3.':1-' . $AMSseqlen{$AMSindref3});
+			}
+			elsif ($AMSleftscaf eq $AMSindref3) {
+				@{$AMSret_hash{$AMSgroup}}=(0, $AMSindref3.':1-'.$AMSarrange{$AMSindref3}{$AMSrightscaf}{'body'}[3], $AMSarrange{$AMSindref3}{$AMSrightscaf}{'right'}[1], $AMSarrange{$AMSindref3}{$AMSrightscaf}{'right'}[0].':'.$AMSarrange{$AMSindref3}{$AMSrightscaf}{'right'}[2].'-'.$AMSarrange{$AMSindref3}{$AMSrightscaf}{'right'}[3]);
+			}
+			elsif ($AMSrightscaf eq $AMSindref3) {
+				@{$AMSret_hash{$AMSgroup}}=($AMSarrange{$AMSindref3}{$AMSleftscaf}{'left'}[1], $AMSarrange{$AMSindref3}{$AMSleftscaf}{'left'}[0].':'.$AMSarrange{$AMSindref3}{$AMSleftscaf}{'left'}[2].'-'.$AMSarrange{$AMSindref3}{$AMSleftscaf}{'left'}[3], 0, $AMSindref3.':'.$AMSarrange{$AMSindref3}{$AMSleftscaf}{'body'}[2].'-'.$AMSseqlen{$AMSindref3});
+			}
+			else {
+				@{$AMSret_hash{$AMSgroup}}=($AMSarrange{$AMSindref3}{$AMSleftscaf}{'left'}[1], $AMSarrange{$AMSindref3}{$AMSleftscaf}{'left'}[0].':'.$AMSarrange{$AMSindref3}{$AMSleftscaf}{'left'}[2].'-'.$AMSarrange{$AMSindref3}{$AMSleftscaf}{'left'}[3], 0, $AMSindref3.':'.$AMSarrange{$AMSindref3}{$AMSleftscaf}{'body'}[2].'-'.$AMSarrange{$AMSindref3}{$AMSrightscaf}{'body'}[3], $AMSarrange{$AMSindref3}{$AMSrightscaf}{'right'}[1], $AMSarrange{$AMSindref3}{$AMSrightscaf}{'right'}[0].':'.$AMSarrange{$AMSindref3}{$AMSrightscaf}{'right'}[2].'-'.$AMSarrange{$AMSindref3}{$AMSrightscaf}{'right'}[3]);
+			}
+		}
+	}
+	if (1) {
+		print "Test \%AMSret_hash\n";
+		print Dumper \%AMSret_hash;
+		print "\n";
+	}
+#%AMSusedrefs=();
+#%AMSusedqrys=();
+	return ($FastaKit_success, \%AMSret_hash);
+}
+#blasr m1 format
+#qName	tName	qStrand	tStrand	score	percentSimilarity	tStart	tEnd	tLength	qStart	qEnd	qLength	nCells
+#scaffold558|size75248/0_75248	ctg00062_015_I05.flt500_scaffold_1	0	0	-110639	73.9228	97339	143974	144035	0	38613	75248	2181834
+#NMPL02003004.1/0_91502	ctg00062_015_I05.flt500_scaffold_1	0	1	-38135	99.9607	136405	144035	144035	0	7633	91502	160275
+
+
+#my $ABMsubinfo='SUB(FastaKit::AnalyzeBlasrM1)';
 #$FastaKit_failure; $FastaKit_success;
-
-
-
 1;
 __END__

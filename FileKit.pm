@@ -44,6 +44,16 @@ File operations
     * Merge >=1 file to 1
     * Return: 1=Success, 0=Failure
 
+=item  RetrieveBasename ($file)
+
+    * Retrieve file basename
+    * Return: $file_basename
+
+=item  RetrieveName ($file)
+
+    * Retrieve file name
+    * Return: $file_name
+
 =back
 
 =head1 FEEDBACK
@@ -76,7 +86,7 @@ use warnings;
 use Exporter;
 use File::Copy;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20171108';
+$VERSION     = '20171113';
 @ISA         = qw(Exporter);
 @EXPORT      = qw(RetrieveDir RetrieveName AddFilePath RetrieveBasename DeletePath MoveFile CopyFile MergeFiles SubsetExtraction CountLines);
 @EXPORT_OK   = qw();
@@ -135,7 +145,7 @@ sub AddFilePath {
 
 
 ### Retrieve filename
-### &RetrieveName ( file )
+### &RetrieveName ($file)
 ### Global: 
 ### Dependency: &AddFilePath
 ### Note: 
