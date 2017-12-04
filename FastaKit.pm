@@ -135,6 +135,12 @@ Fasta -related tools
     * Dependency: FuhaoPerl5Lib::MiscKit qw/FullDigit/;
     * Return: 1=Success    0=failure
 
+=item RmSeqDesc ($fasta_in, $fasta_out)
+
+    * Remove Seq desc in a fasta for quickmerge
+    * Return: 1=Success    0=failure
+
+
 =item RunCap3(reads[.fq|.fasta], output.fasta, [path_cap3])
 
     * RunCap3 to assemble fasta/fastq
@@ -237,12 +243,12 @@ use FuhaoPerl5Lib::CmdKit;
 use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
 use Bio::SeqIO;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20171127';
+$VERSION     = '20171204';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords);
-%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords)],
-                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc);
+%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc)],
+                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -652,7 +658,7 @@ sub ExtractFastaSeqtk {
 	}
 	unlink $EFSoutputfa if (-e $EFSoutputfa);
 	
-	unless (&exec_cmd_return("$EFSpath_seqtk subseq $EFSinputfa $EFSidfile > $EFSoutputfa")) {
+	unless (&exec_cmd_return("$EFSpath_seqtk subseq -l 70 $EFSinputfa $EFSidfile > $EFSoutputfa")) {
 		print STDERR $EFSsubinfo, "Error: seqtk extract fasta running error\n";
 		return $FastaKit_failure;
 	}
@@ -2528,6 +2534,62 @@ sub AnalyzeMummerShowcoords {
 #qName	tName	qStrand	tStrand	score	percentSimilarity	tStart	tEnd	tLength	qStart	qEnd	qLength	nCells
 #scaffold558|size75248/0_75248	ctg00062_015_I05.flt500_scaffold_1	0	0	-110639	73.9228	97339	143974	144035	0	38613	75248	2181834
 #NMPL02003004.1/0_91502	ctg00062_015_I05.flt500_scaffold_1	0	1	-38135	99.9607	136405	144035	144035	0	7633	91502	160275
+
+
+
+### Remove Seq desc for quickmerge
+### RmSeqDesc ($fasta_in, $fasta_out)
+### Global:
+### Dependency:
+### Note: 1=success 0=failure
+sub RmSeqDesc {
+	my ($RSDfastain, $RSDfastaout)=@_;
+	
+	my $RSDsubinfo='SUB(FastaKit::RmSeqDesc)';
+	local *RSDFASTAINPUT; local *RSDFASTAOUTPUT;
+	
+	unless (defined $RSDfastain and -s $RSDfastain) {
+		print STDERR "Error: invalid fasta input\n";
+		return $FastaKit_failure;
+	}
+	unless (defined $RSDfastaout) {
+		print STDERR "Error: invalid fasta output\n";
+		return $FastaKit_failure;
+	}
+	unlink $RSDfastaout if(-e $RSDfastaout);
+	
+	close RSDFASTAINPUT if (defined fileno(RSDFASTAINPUT));
+	unless (open RSDFASTAINPUT, " < $RSDfastain") {
+		print STDERR "Error: can not open fasta input: $RSDfastain\n";
+		return $FastaKit_failure;
+	}
+	close RSDFASTAOUTPUT if(defined fileno(RSDFASTAOUTPUT));
+	unless (open RSDFASTAOUTPUT, " > $RSDfastaout ") {
+		print STDERR "Error: can not write fasta output: $RSDfastaout\n";
+		return $FastaKit_failure;
+	}
+	while (my $RSDline=<RSDFASTAINPUT>) {
+		chomp $RSDline;
+		if ($RSDline=~/^>/) {
+			$RSDline=~s/\s+.*$//;
+			if ($RSDline=~/^(>\S+)\s*.*$/) {
+				$RSDline=$1;
+			}
+			else {
+				print STDERR "Error: invalid seqid: $RSDline\n";
+				return $FastaKit_failure;
+			}
+		}
+		print RSDFASTAOUTPUT $RSDline, "\n";
+	}
+	close RSDFASTAINPUT;
+	close RSDFASTAOUTPUT;
+	
+	return $FastaKit_success;
+}
+
+
+
 
 
 #my $ABMsubinfo='SUB(FastaKit::AnalyzeBlasrM1)';

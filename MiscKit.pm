@@ -490,13 +490,17 @@ sub GetCascadeList {
 		print GCLLIST3 "$GCLid3";
 		$GCLlinenum++;
 		my $GCLlinesread1=0;
+		my %GCLprintednames=();
 		foreach my $GCLid4 (sort keys %{$GCLlist1hash{$GCLid3}}) {
 			my $GCLlinesread2=0;
 			if (exists $GCLlist2hash{$GCLid4}) {
 				foreach my $GCLid5 (sort keys %{$GCLlist2hash{$GCLid4}}) {
 					$GCLlinesread1++;
 					$GCLlinesread2++;
-					print GCLLIST3 "\t", $GCLid5;
+					unless (exists $GCLprintednames{$GCLid5}) {### control non redundant
+						print GCLLIST3 "\t", $GCLid5;
+					}
+					$GCLprintednames{$GCLid5}++;
 				}
 			}
 			else {
