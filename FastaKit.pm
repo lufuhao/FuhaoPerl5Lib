@@ -54,6 +54,12 @@ Fasta -related tools
     * Note: design your $CHEaddition_cmd='-c 1.00 -n 10 -T 0 -r 1 -d 0 -M 30000';
     * Return: 1=Success    0=Failure
 
+=item CheckFastaIdDup ($fasta[.gz])
+
+    * Check if sequence IDs are duplicated in fasta
+    * Dependency: zcat
+    * Return: 1=NO_duplicate; 0=Error_or_have duplicate
+
 =item Code2AA ($codon)
 
     * Convert 3-base codon to single-letter AA
@@ -124,6 +130,11 @@ Fasta -related tools
     * Count number sequences in fasta
     * Return: 0/number_of_sequence
 
+=item RandomDNAgenerator($output.fa, [$num_seq:10], [$seqlen:1000], [$GC_content:0.5])
+
+    * Generate Random DNA
+    * Return: 1=Success    0=failure
+
 =item ReadFastaLength ($input.fa[.gz])
 
      Read fasta seq length into hash \$hash={('seqid1' => length1, 'seqid2' => length2,)}
@@ -193,7 +204,6 @@ Fasta -related tools
     * Return: 1=Success    0=failure
 
 Codon2AA CountFasta
-CheckFastaIdDup
 RunEmbossStretcher
 AnalysisEmbossStretcherOutput
 
@@ -243,12 +253,12 @@ use FuhaoPerl5Lib::CmdKit;
 use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
 use Bio::SeqIO;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20171204';
+$VERSION     = '20171205';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc);
-%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc)],
-                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator);
+%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator)],
+                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -1660,7 +1670,7 @@ sub CountFasta {
 
 
 ### check if duplicated sequence ID in fasta
-### CheckFastaIdDup (my.fasta)
+### CheckFastaIdDup ($fasta[.gz])
 ### Global: 
 ### Dependency: 
 ### Note:
@@ -1677,9 +1687,24 @@ sub CheckFastaIdDup {
 		print STDERR $CFIDsubinfo, "Error: fasta file not found\n";
 		return $FastaKit_failure;
 	}
+
 	close CFIDFASTA if (defined fileno(CFIDFASTA));
-	unless (open (CFIDFASTA, "<$CFIDfasta")) {
-		print STDERR $CFIDsubinfo, "Error: can not open fasta file: $CFIDfasta\n";
+	if ($CFIDfasta=~/(\.fa\.gz$)|(\.fas\.gz$)|(\.fasta.gz$)/i) {
+		print STDERR $CFIDsubinfo, "Info: fasta input in gzipped fasta: $CFIDfasta\n";
+		unless (open (CFIDFASTA, "zcat $CFIDfasta | ")) {
+			print STDERR $CFIDsubinfo, "Error: can not open gzipped fasta input: $CFIDfasta\n";
+			return $FastaKit_failure;
+		}
+	}
+	elsif ($CFIDfasta=~/(\.fa$)|(\.fas$)|(\.fasta$)/i) {
+		print STDERR $CFIDsubinfo, "Info: fasta input in flat fasta: $CFIDfasta\n";
+		unless (open (CFIDFASTA, "< $CFIDfasta")) {
+			print STDERR $CFIDsubinfo, "Error: can not open fasta file: $CFIDfasta\n";
+			return $FastaKit_failure;
+		}
+	}
+	else {
+		print STDERR $CFIDsubinfo, "Info: can not guess input format: $CFIDfasta\n";
 		return $FastaKit_failure;
 	}
 	while (my $CFIDline=<CFIDFASTA>) {
@@ -1694,6 +1719,7 @@ sub CheckFastaIdDup {
 		}
 	}
 	close CFIDFASTA;
+
 	if ($CFIDnum_duplicated_ID>0) {
 		print $CFIDsubinfo, "Info: total number of duplicates: $CFIDnum_duplicated_ID\n";
 		return $FastaKit_failure;
@@ -2590,6 +2616,94 @@ sub RmSeqDesc {
 
 
 
+
+### Generate Random DNA
+### RandomDNAgenerator($output.fa, [$num_seq:10], [$seqlen:1000], [$GC_content])
+### Global: 
+### Dependency:
+### Note: 
+### Return: 1=Success    0=failure
+sub RandomDNAgenerator {
+	my ($RDfa_out, $RDnum_seq, $RDseq_len, $RDgc_content)=@_;
+
+	my $RDsubinfo='SUB(FastaKit::RandomDNAgenerator)';
+	$RDfa_out='Random_sequence.fasta' unless (defined $RDfa_out);
+	$RDnum_seq=10 unless (defined $RDnum_seq and $RDnum_seq=~/^\d+$/);
+	$RDseq_len=1000 unless (defined $RDseq_len and $RDseq_len=~/^\d+$/);
+	$RDgc_content=0.5 unless (defined $RDgc_content and $RDgc_content=~/^\d*\.{0,1}\d*$/ and $RDgc_content>=0 and $RDgc_content<=1);
+	local *RDFASTAOUT;
+
+	unlink $RDfa_out if (-e $RDfa_out);
+
+	print STDERR $RDsubinfo, "Info:\n";
+	print STDERR "    Fasta out:    $RDfa_out\n";
+	print STDERR "    Seq number:   $RDnum_seq\n";
+	print STDERR "    Seq length:   $RDseq_len\n";
+	print STDERR "    GC content:   $RDgc_content\n";
+
+	close RDFASTAOUT if (defined fileno(RDFASTAOUT));
+	unless (open RDFASTAOUT, "> $RDfa_out") {
+		print STDERR $RDsubinfo, "Error: can not write fasta output: $RDfa_out\n";
+		return $FastaKit_failure;
+	}
+
+	for (my $RDj=1; $RDj<=$RDnum_seq; $RDj++) {# generate random sequence
+		my $RDrandom_seed= int(rand(100))^time ^ $$;
+		srand($RDrandom_seed);
+		my $newseq='';
+		for (my $RDi=0;$RDi<=$RDseq_len;$RDi++) {
+			my $RDletter='';
+			my $RDrange=99;
+			my $RDrandom_number=int(rand($RDrange)+1);
+
+			if ($RDgc_content<1) {
+				$RDgc_content=$RDgc_content*100;
+			}
+
+			if ($RDrandom_number <= $RDgc_content) {
+				if(($RDrandom_number%2)==0){
+					$RDletter="G";
+				}
+				else{
+					$RDletter="C";
+				} 
+			}
+			else {
+				if (($RDrandom_number%2)==0){
+					$RDletter="A";
+				}
+				else{
+					$RDletter="T";
+				}
+			}
+			$newseq.= $RDletter;
+
+		}
+		print RDFASTAOUT ">Random_seq"."$RDj\n$newseq\n";
+		if (0) {### For test ###
+			print ">Random_seq$RDj\n$newseq\n";
+		}
+	}
+	close RDFASTAOUT;
+
+	return $FastaKit_success;
+}
+
+
+
+
+
+### 
+### 
+### Global:
+### Dependency:
+### Note: 
+### Return: 1=Success    0=failure
+#sub XXXXX {
+#	my $subinfo='SUB(FastaKit::XXX)';
+#	return $FastaKit_failure;
+#	return $FastaKit_success;
+#}
 
 
 #my $ABMsubinfo='SUB(FastaKit::AnalyzeBlasrM1)';
