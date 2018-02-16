@@ -68,9 +68,9 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20170914';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat);
-%EXPORT_TAGS = ( DEFAULT => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat)],
-                 ALL    => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat)]);
+@EXPORT_OK   = qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer);
+%EXPORT_TAGS = ( DEFAULT => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer)],
+                 ALL    => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer)]);
 
 my $GffKit_success=1;
 my $GffKit_failure=0;
@@ -1744,7 +1744,175 @@ sub ExonerateGff3Reformat {
 
 
 
+### transfer GFF from scaffolds to pseudomolecule
+### AnnotationTransfer($GFF3_input, $config, $GFF_out);
+### Global:
+### Dependency:
+### Note:
+### Return: 1=success, 0=failure
+### Config: scaffold_ID[\t]SeqLen[\t]PSstart[\t]strand+/-[\t]5end_cutoff[\t]3end_cutoff
+### scaffold1	19900	1	+	0	0
+### scaffold2	50000	20001	-	100	0
+### means scaffold2:1-100 not in pseudomolecule
+sub AnnotationTransfer {
+	my ($ATgffin, $ATannot_config, $ATgffout)=@_;
 
+	my $ATsubinfo='SUB(GffKit::AnnotationTransfer)';
+	my $ATend5cutoff=0;
+	my $ATend3cutoff=0;
+	my $ATlinenum=0;
+	my $ATvalidlinenum=0;
+	my %ATconfig_hash=();
+	local *ATANNOTCONFIG; local *ATGFFIN; local *ATGFFOUT;
+
+	unless (defined $ATgffin and -s $ATgffin) {
+		print STDERR $ATsubinfo, "Error: invalid GFF3 input\n";
+		return $GffKit_failure;
+	}
+	unless (defined $GffKit_failure and -s $GffKit_failure) {
+		print STDERR $ATsubinfo, "Error: invalid annotation config file\n";
+		return $GffKit_failure;
+	}
+	unless (defined $ATgffout) {
+		print STDERR $ATsubinfo, "Error: invalid GFF3 output file name\n";
+		return $GffKit_failure;
+	}
+	unlink $ATgffout if (-e $ATgffout);
+
+	close ATANNOTCONFIG if (defined fileno(ATANNOTCONFIG));
+	unless (open ATANNOTCONFIG, "<", $ATannot_config) {
+		print STDERR $ATsubinfo, "Error: can not open annotation config file\n";
+		return $GffKit_failure;
+	}
+	while (my $ATline=<ATANNOTCONFIG>) {
+		chomp $ATline;
+		$ATlinenum++;
+		next if ($ATline=~/^#/);
+		my @ATarr=();
+		@ATarr=split(/\t/, $ATline);
+		unless (scalar(@ATarr)>=4) {
+			print STDERR $ATsubinfo, "Error: invalid elements (>=3) at annotation config file line($ATlinenum):$ATline\n";
+			return $GffKit_failure;
+		}
+		unless(defined $ATarr[0] and $ATarr[0]=~/^\S+$/) {
+			print STDERR $ATsubinfo, "Error: invalid seqID(col1) at annotation config file line($ATlinenum):$ATline\n";
+			return $GffKit_failure;
+		}
+		if (exists $ATconfig_hash{$ATarr[0]}) {
+			print STDERR $ATsubinfo, "Error: duplicate seqID(col1) at annotation config file line($ATlinenum):$ATline\n";
+			return $GffKit_failure;
+		}
+		unless (defined $ATarr[1] and $ATarr[1]=~/^\d+$/ and $ATarr[1]>0) {
+			print STDERR $ATsubinfo, "Error: invalid seq length (col2) at annotation config file line($ATlinenum):$ATline\n";
+			return $GffKit_failure;
+		}
+		unless (defined $ATarr[2] and $ATarr[2]=~/^\d+$/ and $ATarr[2]>0) {
+			print STDERR $ATsubinfo, "Error: invalid Position(col3) at annotation config file line($ATlinenum):$ATline\n";
+			return $GffKit_failure;
+		}
+		unless (defined $ATarr[3] and $ATarr[3]=~/^[+\-0-1]$/) {
+			print STDERR $ATsubinfo, "Error: invalid Strand(col4) at annotation config file line($ATlinenum):$ATline\n";
+			return $GffKit_failure;
+		}
+		if (defined $ATarr[4]) {
+			unless ($ATarr[4]=~/^\d+$/ and $ATarr[4]>=0) {
+				print STDERR $ATsubinfo, "Error: invalid 5'end cutoff (col5) at annotation config file line($ATlinenum):$ATline\n";
+				return $GffKit_failure;
+			}
+		}
+		else {
+			$ATarr[4]=0;
+		}
+		if (defined $ATarr[5]) {
+			unless ($ATarr[5]=~/^\d+$/ and $ATarr[5]>=0) {
+				print STDERR $ATsubinfo, "Error: invalid 3'end cutoff (col5) at annotation config file line($ATlinenum):$ATline\n";
+				return $GffKit_failure;
+			}
+		}
+		else {
+			$ATarr[5]=0;
+		}
+		$ATvalidlinenum++;
+		$ATconfig_hash{$ATarr[0]}{'len'}=$ATarr[1];
+		$ATconfig_hash{$ATarr[0]}{'loc'}=$ATarr[2];
+		$ATconfig_hash{$ATarr[0]}{'std'}=$ATarr[3];
+		$ATconfig_hash{$ATarr[0]}{'co5'}=$ATarr[4];
+		$ATconfig_hash{$ATarr[0]}{'co3'}=$ATarr[5];
+	}
+	close ATANNOTCONFIG;
+	print $ATsubinfo, "Info: Read GFF3 config lines: $ATlinenum\n";
+	print $ATsubinfo, "Info:     valid config lines: $ATvalidlinenum\n";
+
+	$ATlinenum=0;
+	$ATvalidlinenum=0;
+	close ATGFFIN if (defined fileno(ATGFFIN));
+	unless (open ATGFFIN, "<", $ATgffin) {
+		print STDERR $ATsubinfo, "Error: can not open GFF3 input file\n";
+		return $GffKit_failure;
+	}
+	close ATGFFOUT if (defined fileno(ATGFFOUT));
+	unless (open ATGFFOUT, ">", $ATgffout) {
+		print STDERR $ATsubinfo, "Error: can not write GFF3 output file\n";
+		return $GffKit_failure;
+	}
+	while (my $ATline=<ATGFFIN>) {
+		chomp $ATline;
+		$ATlinenum++;
+		if ($ATline=~/^#/) {
+			print ATGFFOUT $ATline, "\n";
+			$ATvalidlinenum++;
+			next;
+		}
+		my @ATarr=();
+		@ATarr=split(/\t/, $ATline);
+		unless (exists $ATconfig_hash{$ATarr[0]}) {
+			print STDERR $ATsubinfo, "Warnings: ignored sequence ID as no config1: $ATarr[0]\n";
+			next;
+		}
+		unless (exists $ATconfig_hash{$ATarr[0]}{'loc'} and exists $ATconfig_hash{$ATarr[0]}{'std'}) {
+			print STDERR $ATsubinfo, "Warnings: ignored sequence ID as no config2: $ATarr[0]\n";
+			next;
+		}
+		$ATconfig_hash{$ATarr[0]}{'co5'}=0 unless (exists $ATconfig_hash{$ATarr[0]}{'co5'});
+		$ATconfig_hash{$ATarr[0]}{'co3'}=0 unless (exists $ATconfig_hash{$ATarr[0]}{'co3'});
+		
+		unless ($ATarr[3]>$ATconfig_hash{$ATarr[0]}{'co5'} and $ATarr[3]<=($ATconfig_hash{$ATarr[0]}{'len'}-$ATconfig_hash{$ATarr[0]}{'co3'})) {
+			print STDERR $ATsubinfo, "Error: coord not in range line($ATlinenum): $ATline\n";
+			return $GffKit_failure;
+		}
+		unless ($ATarr[4]>$ATconfig_hash{$ATarr[0]}{'co5'} and $ATarr[4]<=($ATconfig_hash{$ATarr[0]}{'len'}-$ATconfig_hash{$ATarr[0]}{'co3'})) {
+			print STDERR $ATsubinfo, "Error: coord not in range line($ATlinenum): $ATline\n";
+			return $GffKit_failure;
+		}
+		if ($ATconfig_hash{$ATarr[0]}{'std'} eq '+') {
+			$ATarr[3] = $ATconfig_hash{$ATarr[0]}{'loc'}+ $ATarr[3] -1-$ATconfig_hash{$ATarr[0]}{'co5'};
+			$ATarr[4] = $ATconfig_hash{$ATarr[0]}{'loc'}+ $ATarr[4] -1-$ATconfig_hash{$ATarr[0]}{'co5'};
+		}
+		elsif ($ATconfig_hash{$ATarr[0]}{'std'} eq '-') {
+			my $ATtemp=$ATconfig_hash{$ATarr[0]}{'loc'} + ($ATconfig_hash{$ATarr[0]}{'len'}-$ATconfig_hash{$ATarr[0]}{'co3'}-$ATarr[4]+1) +1;
+			$ATarr[4] = $ATconfig_hash{$ATarr[0]}{'loc'} + ($ATconfig_hash{$ATarr[0]}{'len'}-$ATconfig_hash{$ATarr[0]}{'co3'}-$ATarr[3]+1) +1;
+			$ATarr[3]=$ATtemp;
+			if ($ATarr[6] eq '+') {
+				$ATarr[6] = '-';
+			}
+			elsif ($ATarr[6] eq '-') {
+				$ATarr[6] = '+';
+			}
+			else {
+				print STDERR $ATsubinfo, "Error: invalid strand line($ATlinenum): $ATline\n";
+				return $GffKit_failure;
+			}
+		}
+		$ATvalidlinenum++;
+		print ATGFFOUT join("\t", @ATarr), "\n";
+	}
+	close ATGFFIN;
+	close ATGFFOUT;
+	print $ATsubinfo, "Info: read GFF3 lines: $ATlinenum\n";
+	print $ATsubinfo, "Info:     valid lines: $ATvalidlinenum\n";
+
+	return $GffKit_success;
+}
 #my $GRSsubinfo='SUB(GffKit::GffReverseStrand)';
 #my $GffKit_success=1; $GffKit_failure=0; $GffKit_debug=0;
 1;

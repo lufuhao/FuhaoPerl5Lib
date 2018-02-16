@@ -85,7 +85,7 @@ Fasta -related tools
     * Dependancy: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
     * Return: 1=Success    0=Failure
 
-=item ExtractFastaSeqtk (my.fa, output.fa, $id_file, [path_seqtk]);
+=item ExtractFastaSeqtk ($input.fa, $output.fa, $id_file, [path_seqtk]);
 
     * Extract fasta sequences using seqtk with a list of ids/bed, better for large list
     * Dependancy: FuhaoPerl5Lib::CmdKit qw/exec_cmd_return/
@@ -256,9 +256,9 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20171205';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator);
-%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator)],
-                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords);
+%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords)],
+                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -651,12 +651,6 @@ sub ExtractFastaSeqtk {
 	unless (defined $EFSinputfa and -s $EFSinputfa) {
 		print STDERR $EFSsubinfo, "Error: invalid input fasta file: $EFSinputfa\n";
 		return $FastaKit_failure;
-	}
-	unless (-s "$EFSinputfa.fai") {
-		unless (&IndexFasta($EFSinputfa, $EFSpath_seqtk)) {
-			print STDERR $EFSsubinfo, "Error: unable to index fasta file: $EFSinputfa\n";
-			return $FastaKit_failure;
-		}
 	}
 	unless (defined $EFSidfile and $EFSidfile=~/^\S+$/) {
 		print STDERR $EFSsubinfo, "Error: invalid fasta ID list file: $EFSidfile\n";
@@ -2560,7 +2554,207 @@ sub AnalyzeMummerShowcoords {
 #qName	tName	qStrand	tStrand	score	percentSimilarity	tStart	tEnd	tLength	qStart	qEnd	qLength	nCells
 #scaffold558|size75248/0_75248	ctg00062_015_I05.flt500_scaffold_1	0	0	-110639	73.9228	97339	143974	144035	0	38613	75248	2181834
 #NMPL02003004.1/0_91502	ctg00062_015_I05.flt500_scaffold_1	0	1	-38135	99.9607	136405	144035	144035	0	7633	91502	160275
+sub GroupMummerShowcoords {
+	my ($AMSshow_coords_out)=shift;
 
+	my $AMSsubinfo='SUB(FastaKit::AnalyzeMummerShowcoords)';
+	my %AMSrefs=();
+	my %AMSqrys=();
+	my %AMSalignment=();
+	local *AMSINPUT;
+	my $AMSuse_most_strand=1;
+	my %AMSusedrefs=();
+	my %AMSusedqrys=();
+	my $AMSmin_perc=0;
+	my $AMSmin_len=0;
+	my $AMSgroupnum=0;
+	my %AMSseq2num=();
+	my %AMSnum2seq=();
+	my %AMSseqlen=();
+	my %AMSret_hash=();
+
+	unless (defined $AMSshow_coords_out and -s $AMSshow_coords_out) {
+		print STDERR $AMSsubinfo, "Error: invalid input\n";
+		return $FastaKit_failure;
+	}
+
+	close AMSINPUT if(defined fileno(AMSINPUT));
+#[S1]    [E1]    [S2]    [E2]    [LEN 1] [LEN 2] [% IDY] [LEN R] [LEN Q] [COV R] [COV Q] [TAGS]
+#1       6850    95856   89010   6850    6847    99.87   162893  102105  4.21    6.71    NMPL02000078.1  ctg00052_109_E14.flt500_scaffold_1
+#3810    6982    3173    1       3173    3173    99.62   162893  59328   1.95    5.35    NMPL02000078.1  ctg00052_001_D08.flt500_scaffold_1
+#7003    32331   88983   63663   25329   25321   99.03   162893  102105  15.55   24.80   NMPL02000078.1  ctg00052_109_E14.flt500_scaffold_1
+#36207   59164   6554    29516   22958   22963   99.70   162893  29516   14.09   77.80   NMPL02000078.1  ctg00109_074_B16.flt500_scaffold_1
+#55891   59178   124573  127872  3288    3300    99.12   162893  139267  2.02    2.37    NMPL02000078.1  ctg00052_011_A17.flt500_scaffold_1
+	unless (open AMSINPUT, "< $AMSshow_coords_out") {
+		print STDERR $AMSsubinfo, "Error: failed to open input: $AMSshow_coords_out\n";
+		return $FastaKit_failure;
+	}
+	<AMSINPUT>;<AMSINPUT>;<AMSINPUT>;
+	my $AMSline=<AMSINPUT>;
+	my @AMStemparr=split(/\t/, $AMSline);
+	my ($AMSlenRcol, $AMSlenQcol, $AMSrefcol, $AMSqrycol)=(-1, -1, -1, -1);
+	for (my $AMSlabel=0; $AMSlabel<scalar (@AMStemparr); $AMSlabel++) {
+		if ($AMStemparr[$AMSlabel]=~/^\[LEN\s+R\]$/) {$AMSlenRcol=$AMSlabel;next;}
+		if ($AMStemparr[$AMSlabel]=~/^\[LEN\s+Q\]$/) {$AMSlenQcol=$AMSlabel;next;}
+		if ($AMStemparr[$AMSlabel]=~/^\[TAGS\]$/) {$AMSrefcol=$AMSlabel;next;}
+	}
+	unless ($AMSlenRcol>0) {
+		print STDERR $AMSsubinfo, "Error: can not detect [LEN R] column number\n$AMSline\n";
+		print STDERR $AMSsubinfo, "Info: please run shw-coords with -l option\n";
+		return $FastaKit_failure;
+	} 
+	unless ($AMSlenQcol>0) {
+		print STDERR $AMSsubinfo, "Error: can not detect [LEN Q] column number\n$AMSline\n";
+		print STDERR $AMSsubinfo, "Info: please run shw-coords with -l option\n";
+		return $FastaKit_failure;
+	}
+	unless ($AMSrefcol>0) {
+		print STDERR $AMSsubinfo, "Error: can not detect [TAGS] column number\n$AMSline\n";
+		return $FastaKit_failure;
+	}
+	$AMSqrycol=$AMSrefcol+1;
+	unless ($AMSqrycol>0) {
+		print STDERR $AMSsubinfo, "Error: can not detect [TAGS] query column number\n$AMSline\n";
+		return $FastaKit_failure;
+	}
+	my $AMSlinenum=4;
+	while ($AMSline=<AMSINPUT>) {
+		chomp $AMSline;
+		$AMSlinenum++;
+		my @AMSarr=split(/\s+/, $AMSline);
+
+#[S1]		$AMSarr[0]
+#[E1]		$AMSarr[1]
+#[S2]		$AMSarr[2]
+#[E2]		$AMSarr[3]
+#[LEN 1]	$AMSarr[4]
+#[LEN 2]	$AMSarr[5]
+#[% IDY]	$AMSarr[6]
+#[LEN R]	$AMSarr[7]
+#[LEN Q]	$AMSarr[8]
+#[COV R]	$AMSarr[9]
+#[COV Q]	$AMSarr[10]
+#[REF1]		$AMSarr[11]
+#[QRY2]		$AMSarr[12]
+
+		my $AMSstrand=0; ### 0=same; 1=reverse
+		my ($AMSrfnstart, $AMSrfnend, $AMSqrystart, $AMSqryend); 
+		if ($AMSarr[0]<$AMSarr[1] and $AMSarr[2]<$AMSarr[3]) {
+			$AMSrfnstart=$AMSarr[0]; $AMSrfnend=$AMSarr[1];
+			$AMSqrystart=$AMSarr[2]; $AMSqryend=$AMSarr[3];
+			$AMSstrand=0;
+		}
+		elsif ($AMSarr[0]>$AMSarr[1] and $AMSarr[2]>$AMSarr[3]) {
+			$AMSrfnstart=$AMSarr[1]; $AMSrfnend=$AMSarr[0];
+			$AMSqrystart=$AMSarr[3]; $AMSqryend=$AMSarr[2];
+			$AMSstrand=0;
+		}
+		elsif ($AMSarr[0]<$AMSarr[1] and $AMSarr[2]>$AMSarr[3]) {
+			$AMSrfnstart=$AMSarr[0]; $AMSrfnend=$AMSarr[1];
+			$AMSqrystart=$AMSarr[3]; $AMSqryend=$AMSarr[2];
+			$AMSstrand=1;
+		}
+		elsif ($AMSarr[0]>$AMSarr[1] and $AMSarr[2]<$AMSarr[3]) {
+			$AMSrfnstart=$AMSarr[1]; $AMSrfnend=$AMSarr[0];
+			$AMSqrystart=$AMSarr[2]; $AMSqryend=$AMSarr[3];
+			$AMSstrand=1;
+		}
+		else {
+			print STDERR $AMSsubinfo, "Error: invalid line($AMSlinenum): $AMSline\n";
+			return $FastaKit_failure;
+		}
+		if (exists $AMSseqlen{$AMSarr[$AMSrefcol]}) {
+			unless ($AMSseqlen{$AMSarr[$AMSrefcol]}==$AMSarr[$AMSlenRcol]) {
+				print STDERR $AMSsubinfo, "Error: inconsistent ref length line($AMSlinenum): $AMSline\n";
+				return $FastaKit_failure;
+			}
+		}
+		else {
+			$AMSseqlen{$AMSarr[$AMSrefcol]}=$AMSarr[$AMSlenRcol];
+		}
+		if (exists $AMSseqlen{$AMSarr[$AMSqrycol]}) {
+			unless ($AMSseqlen{$AMSarr[$AMSqrycol]}==$AMSarr[$AMSlenQcol]) {
+				print STDERR $AMSsubinfo, "Error: inconsistent query length line($AMSlinenum): $AMSline\n";
+				return $FastaKit_failure;
+			}
+		}
+		else {
+			$AMSseqlen{$AMSarr[$AMSqrycol]}=$AMSarr[$AMSlenQcol];
+		}
+		@{$AMSalignment{$AMSarr[$AMSrefcol]}{$AMSarr[$AMSqrycol]}{$AMSlinenum}}=($AMSstrand, $AMSrfnstart, $AMSrfnend, $AMSqrystart, $AMSqryend);
+		@{$AMSalignment{$AMSarr[$AMSqrycol]}{$AMSarr[$AMSrefcol]}{$AMSlinenum}}=($AMSstrand, $AMSqrystart, $AMSqryend, $AMSrfnstart, $AMSrfnend);
+
+		$AMSrefs{$AMSarr[$AMSrefcol]}++;
+		$AMSqrys{$AMSarr[$AMSqrycol]}++;
+	}
+	close AMSINPUT;
+	if (0) {### for test ###
+		print $AMSsubinfo, "Test: \%AMSalignment\n";
+		print Dumper \%AMSalignment;
+		print "\n";
+	}
+	if (0) {### for test ###
+		print $AMSsubinfo, "Test: \%AMSseqlen\n";
+		print Dumper \%AMSseqlen;
+		print "\n";
+	}
+
+### Group all the linkable reference to a group
+	foreach my $AMSindref1 (keys %AMSrefs) {
+		$AMSseq2num{$AMSindref1}=$AMSgroupnum++;
+	}
+	foreach my $AMSindref1 (keys %AMSrefs) {
+		my @AMSarrnum=();
+		push @AMSarrnum, $AMSseq2num{$AMSindref1};
+		foreach my $AMSindqry (keys %{$AMSalignment{$AMSindref1}}) {
+			if (exists $AMSseq2num{$AMSindqry}) {
+				push @AMSarrnum, $AMSseq2num{$AMSindqry};
+			}
+			foreach my $AMSindref2 (keys %{$AMSalignment{$AMSindqry}}) {
+				push @AMSarrnum, $AMSseq2num{$AMSindref2};
+			}
+		}
+		### Get the minimal group number
+		@AMSarrnum=sort {$a <=> $b} @AMSarrnum;
+		unless (scalar(@AMSarrnum)>0) {
+			print STDERR $AMSsubinfo, "Error: unassign group: REF $AMSindref1\n";
+			return $FastaKit_failure;
+		}
+		my $AMDminnum=shift @AMSarrnum;
+		unless ($AMDminnum=~/^\d+$/) {
+			print STDERR $AMSsubinfo, "Error: invalid group number: REF $AMSindref1\n";
+			return $FastaKit_failure;
+		}
+		### Apply all to this minimal group number
+		$AMSseq2num{$AMSindref1}=$AMDminnum;
+		foreach my $AMSindqry (keys %{$AMSalignment{$AMSindref1}}) {
+			$AMSseq2num{$AMSindqry}=$AMDminnum;
+			foreach my $AMSindref2 (keys %{$AMSalignment{$AMSindqry}}) {
+				$AMSseq2num{$AMSindref2}=$AMDminnum;
+			}
+		}
+		foreach my $AMSseqid (keys %AMSseq2num) {
+			foreach (@AMSarrnum) {
+				$AMSseq2num{$AMSseqid}=$AMDminnum if ($AMSseq2num{$AMSseqid}==$_);
+			}
+		}
+	}
+	foreach my $AMSindref1 (keys %AMSseq2num) {
+		$AMSnum2seq{$AMSseq2num{$AMSindref1}}{$AMSindref1}++;
+	}
+	if (0) {
+		print $AMSsubinfo, "Test: Grouped sequences\n";
+		print Dumper \%AMSseq2num;
+		print "\n";
+	}
+	if (0) {
+		print $AMSsubinfo, "Test: Grouped sequences\n";
+		print Dumper \%AMSnum2seq;
+		print "\n";
+	}
+	
+	return ($FastaKit_success, \%AMSnum2seq);
+}
 
 
 ### Remove Seq desc for quickmerge
