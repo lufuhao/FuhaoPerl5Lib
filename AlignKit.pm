@@ -74,9 +74,9 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20161103';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(Bowtie2Index Bowtie2p);
-%EXPORT_TAGS = ( DEFAULT => [qw(Bowtie2Index Bowtie2p)],
-                 ALL    => [qw(Bowtie2Index Bowtie2p)]);
+@EXPORT_OK   = qw(Bowtie2Index Bowtie2p MummerChainNet);
+%EXPORT_TAGS = ( DEFAULT => [qw(Bowtie2Index Bowtie2p MummerChainNet)],
+                 ALL    => [qw(Bowtie2Index Bowtie2p MummerChainNet)]);
 
 
 my $AlignKit_success=1;
@@ -176,6 +176,83 @@ sub Bowtie2p {
 
 
 
+### Chain/Net 13 columns output of show-coords in mummer
+### MummerChainNet($coords_in, $coords_out, [$gap:1000], [$min_identity_percentage:0], [$min_alignlength:0])
+### Dependency:
+### Global:
+### Return: 1=success, 0=failure
+### Note: 
+### Input is the output of `show-coords -c -r -l -T xxx.delta
+###      13 column and the first 4 line (headers) would be ignored
+### $min_identity_percentage: say 90, 95, etc
+sub MummerChainNet {
+	my ($MCNcoords_in, $MCNcoords_out, $MCNmax_allowed_gap, $MCNmin_identity, $MCNmin_alignlength)=@_;
 
+	my $MCNsubinfo='SUB(AlignKit::MummerChainNet)';
+	$MCNmax_allowed_gap=1000 unless (defined $MCNmax_allowed_gap);
+	$MCNmin_identity=0 unless (defined $MCNmin_identity);
+	$MCNmin_alignlength=0 unless (defined $MCNmin_alignlength);
+	my $MCNlinenum=0;
+	local *MCNCOORDSIN; local *MCNCOORDSOUT;
+	
+	unless (defined $MCNcoords_in and -s $MCNcoords_in) {
+		print STDERR $MCNsubinfo, "Error: invalid coordinate input\n----Please use show-coords -c -r -l -T xxx.delta > xxx.coord to prepare your input\n";
+		return $AlignKit_failure;
+	}
+	unless ($MCNcoords_out) {
+		print STDERR $MCNsubinfo, "Error: invalid coordinate output\n";
+		return $AlignKit_failure;
+	}
+	unlink $MCNcoords_out if (-e $MCNcoords_out);
+	unless ($MCNmax_allowed_gap=~/^\d+$/) {
+		print STDERR $MCNsubinfo, "Error: invalid MCNmax_allowed_gap, should be INT\n";
+		return $AlignKit_failure;
+	}
+	unless ($MCNmin_identity=~/^\d+\.{0,1}\d*$/) {
+		print STDERR $MCNsubinfo, "Error: invalid MCNmin_identity, should be INT/FLOAT\n";
+		return $AlignKit_failure;
+	}
+	unless ($MCNmin_alignlength=~/^\d+$/) {
+		print STDERR $MCNsubinfo, "Error: invalid MCNmin_alignlength, should be INT\n";
+		return $AlignKit_failure;
+	}
+	
+	close MCNCOORDSIN if (defined fileno(MCNCOORDSIN));
+	unless (open MCNCOORDSIN, "<", $MCNcoords_in) {
+		print STDERR $MCNsubinfo, "Error: can not open coordinate input\n";
+		return $AlignKit_failure;
+	}
+	close MCNCOORDSOUT if (defined fileno(MCNCOORDSOUT));
+	unless (open MCNCOORDSOUT, ">", $MCNcoords_out) {
+		print STDERR $MCNsubinfo, "Error: can not write coordinate output\n";
+		return $AlignKit_failure;
+	}
+	my $MCNline=<MCNCOORDSIN>; print MCNCOORDSOUT $MCNline;$MCNlinenum++;### ignore first 4 header lines
+	$MCNline=<MCNCOORDSIN>; print MCNCOORDSOUT $MCNline;$MCNlinenum++;### ignore first 4 header lines
+	$MCNline=<MCNCOORDSIN>; print MCNCOORDSOUT $MCNline;$MCNlinenum++;### ignore first 4 header lines
+	$MCNline=<MCNCOORDSIN>; print MCNCOORDSOUT $MCNline;$MCNlinenum++;### ignore first 4 header lines
+	while ($MCNline=<MCNCOORDSIN>) {
+		chomp $MCNline;
+		$MCNlinenum++;
+		my @MCNarr=split(/\t/, $MCNline);
+		unless (scalar(@MCNarr)==13) {
+			print STDERR $MCNsubinfo, "Error: NOT 13 column at line($MCNlinenum): $MCNcoords_in\n";
+			return $AlignKit_failure;
+		}
+		### to be continued
+	}
+	close MCNCOORDSIN;
+	
+	
+	
+	
+	close MCNCOORDSOUT;
+	return $AlignKit_success;
+}
+
+
+#my $BIsubinfo='SUB(AlignKit::RunBowtie2Index)';
+#my $AlignKit_success=1;
+#my $AlignKit_failure=0;
 1;
 __END__

@@ -16,19 +16,47 @@ Perl Modules:
 
 =over 2
 
+=item AnnotationTransfer($GFF3_input, $config, $GFF_out);
+
+    * transfer GFF from scaffolds to pseudomolecule
+    * Return: 1=success, 0=failure
+    * Config[tab-delimited]:
+           New_scaf	PSstart	Prev	scaffold_ID	strand+/-	start	end
+           New_scaf1	1	scaffold1	+	1	19900
+           New_scaf1	20001	scaffold2	-	101	50000
+                ### means scaffold2:1-100 not in pseudomolecule
+
+=item ExonerateGff3Reformat (\$cDNA_gff3_input, \$CDS_gff3_input, \$file_gff3_output)
+
+    * Reformat exonerate GFF3
+    * Return: 1=success, 0=failure
+
+=item Gff3Renamer (gffin, id_list, gffout)
+
+    * rename geneID after scaffolding to a pseudomolecule
+    * $id_list (2 column: first col = old_ID; second col = new_ID)
+         old_id1	new_id1
+
+
 =item GffReverseStrand (input.gff3, reference.fa/fai, output.gff3, samtools_path)
 
     * Convert GFF file to reverse complement strand
     * Return: 1=Sucesss    0=Failure
     * Note: reference.fa needs samtools while reference.fa.fai donot
 
-
 =item WriteGff3 (output.gff3, \%(gene))
 
-=item ExonerateGff3Reformat (\$cDNA_gff3_input, \$CDS_gff3_input, \$file_gff3_output)
 
-    * Reformat exonerate GFF3
-    * Return: 1=success, 0=failure
+=item SortGeneOrder($gff3_genelist_in, $order_in, $gene_order_out)
+
+    * order genenames by scaffold order
+    * $order_in: [tab-delimited]
+          seq1	+
+          seq2	-
+          seq3	+
+    * gff3.genelist [tab-delimited]
+          grep -E "\tgene\t" xxx.gff3 > gff3.genelist
+    * Return: 1=Sucesss    0=Failure
 
 =back
 
@@ -65,12 +93,12 @@ use FuhaoPerl5Lib::FastaKit qw/IndexFasta Frame3Translation SeqRevComp/;
 use Bio::DB::Fasta;
 use Data::Dumper qw/Dumper/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20170914';
+$VERSION     = '20180403';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer);
-%EXPORT_TAGS = ( DEFAULT => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer)],
-                 ALL    => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer)]);
+@EXPORT_OK   = qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer);
+%EXPORT_TAGS = ( DEFAULT => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer)],
+                 ALL    => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer)]);
 
 my $GffKit_success=1;
 my $GffKit_failure=0;
@@ -674,8 +702,8 @@ sub ReadGff3 {
 			return $GffKit_failure;
 		}
 		unless (&CdsCoordConfirm($RGexonarray, $RGcdsarray)) {### Confirm all CDS are in exons
-			print STDERR $RGsubinfo, "Error: CDS out of exons: mRNA $RGind_mrna\n";
-			return $GffKit_failure;
+			print STDERR $RGsubinfo, "Warnings: CDS out of exons: mRNA $RGind_mrna\n";
+#			return $GffKit_failure;
 		}
 		my $RGexistsingphase=0;
 		my $RGnum_notphased=0;
@@ -776,7 +804,7 @@ sub ReadGff3 {
 					}
 				}
 				elsif (scalar(@RGbestframe)==0) {
-					print $RGsubinfo, "Error: strand + internal stop: mRNA $RGind_mrna\n";
+					print $RGsubinfo, "Warnings: strand + internal stop: mRNA $RGind_mrna\n";
 					print Dumper $RGphases;
 					print Dumper $RGprot;
 #					return $GffKit_failure;
@@ -861,7 +889,7 @@ sub ReadGff3 {
 		}}###RGLOOP2
 #		print $RGsubinfo, "Test: mRNA $RGind_mrna \$RGphases 3\n"; print Dumper $RGphases;### For test ###
 		unless (scalar(@{$RGphases})==scalar(keys %{${$RGcds}{$RGind_mrna}{'phase'}})) {
-			print STDERR "Error: invalid phases ", $RGind_mrna, "\n";
+			print STDERR $RGsubinfo, "Error: invalid phases ", $RGind_mrna, "\n";
 			print Dumper $RGphases;
 			return $GffKit_failure;
 		}
@@ -869,9 +897,9 @@ sub ReadGff3 {
 			### Check if all phased
 			for (my $RGi=0; $RGi<scalar(@{$RGphases}); $RGi++) {
 				unless (defined ${$RGphases}[$RGi] and ${$RGphases}[$RGi]=~/^[012]{1,1}$/) {
-					print STDERR "Error: can not determine phased value ", $RGind_mrna, "\n";
+					print STDERR $RGsubinfo, "Warnings: can not determine phased value ", $RGind_mrna, "\n";
 					print Dumper $RGphases;
-					return $GffKit_failure;
+#					return $GffKit_failure;
 				}
 			}
 			### Transfer nre phases
@@ -1082,7 +1110,11 @@ sub GetPartialPhase {
 			$GPPret_phase_arr=[];
 			$GPPfit=0;
 			$GPPunfit=0;
+#			print $GPPsubinfo, "Test: CDS array\n"; print Dumper $GPPcdsarr; print "\n";### For test ###
 			GPPLOOP4 : { for (my $GPPj=0; $GPPj<scalar(@{$GPPcdsarr}); $GPPj++) {
+				$GPPphase=(${$GPPcdsarr}[$GPPj][1]-${$GPPcdsarr}[$GPPj][0]+1+$GPPphase)%3;
+				$GPPphase=0 if ($GPPphase==3);
+				push (@{$GPPret_phase_arr}, $GPPphase);
 				if (${$GCPphases}[$GPPj]=~/^[012]{1,1}$/) {
 					if (${$GCPphases}[$GPPj]==$GPPphase) {
 						$GPPfit=1;
@@ -1092,9 +1124,7 @@ sub GetPartialPhase {
 						next GPPLOOP3;
 					}
 				}
-				$GPPphase=(${$GPPcdsarr}[$GPPj][1]-${$GPPcdsarr}[$GPPj][0]+1-$GPPphase)%3;
-				$GPPphase=0 if ($GPPphase==3);
-				push (@{$GPPret_phase_arr}, $GPPphase);
+#				print STDERR $GPPsubinfo, "Test: CDS", ${$GPPcdsarr}[$GPPj][0], "-", ${$GPPcdsarr}[$GPPj][1], " phase[$GPPj] $GPPphase\n"; ### For test ###
 			}}###GPPLOOP4
 			if ($GPPfit==1 and $GPPunfit==0) {
 				last GPPLOOP3;
@@ -1106,9 +1136,13 @@ sub GetPartialPhase {
 		return $GffKit_failure;
 	}
 	unless (scalar(@{$GCPphases})==scalar(@{$GPPret_phase_arr})) {
-		print STDERR $GPPsubinfo, "Error: phase complete error\n";
+		print STDERR $GPPsubinfo, "Error: phase array number error:\n";
+		print STDERR $GPPsubinfo, "  Ori: ", join("\t", @{$GCPphases}), "\n";
+		print STDERR $GPPsubinfo, "  Cal: ", join("\t", @{$GPPret_phase_arr}), "\n";
 		return $GffKit_failure;
 	}
+#	print STDERR $GPPsubinfo, "  Ori: ", join("\t", @{$GCPphases}), "\n";### For test ###
+#	print STDERR $GPPsubinfo, "  Cal: ", join("\t", @{$GPPret_phase_arr}), "\n";### For test ###
 	
 	@{$GCPphases}=@{$GPPret_phase_arr};
 	
@@ -1750,9 +1784,9 @@ sub ExonerateGff3Reformat {
 ### Dependency:
 ### Note:
 ### Return: 1=success, 0=failure
-### Config: scaffold_ID[\t]SeqLen[\t]PSstart[\t]strand+/-[\t]5end_cutoff[\t]3end_cutoff
-### scaffold1	19900	1	+	0	0
-### scaffold2	50000	20001	-	100	0
+### Config: New_scaf	PSstart	Prev	scaffold_ID	strand+/-	start	end
+### New_scaf1	1	scaffold1	+	1	19900
+### New_scaf1	20001	scaffold2	-	101	50000
 ### means scaffold2:1-100 not in pseudomolecule
 sub AnnotationTransfer {
 	my ($ATgffin, $ATannot_config, $ATgffout)=@_;
@@ -1762,14 +1796,15 @@ sub AnnotationTransfer {
 	my $ATend3cutoff=0;
 	my $ATlinenum=0;
 	my $ATvalidlinenum=0;
+	my $ATexcluded_linenum=0;
 	my %ATconfig_hash=();
-	local *ATANNOTCONFIG; local *ATGFFIN; local *ATGFFOUT;
+	local *ATANNOTCONFIG; local *ATGFFIN; local *ATGFFOUT; local *ATGFF_EXCLUDE;
 
 	unless (defined $ATgffin and -s $ATgffin) {
 		print STDERR $ATsubinfo, "Error: invalid GFF3 input\n";
 		return $GffKit_failure;
 	}
-	unless (defined $GffKit_failure and -s $GffKit_failure) {
+	unless (defined $ATannot_config and -s $ATannot_config) {
 		print STDERR $ATsubinfo, "Error: invalid annotation config file\n";
 		return $GffKit_failure;
 	}
@@ -1778,6 +1813,7 @@ sub AnnotationTransfer {
 		return $GffKit_failure;
 	}
 	unlink $ATgffout if (-e $ATgffout);
+	unlink "$ATgffout.excluded" if (-e "$ATgffout.excluded");
 
 	close ATANNOTCONFIG if (defined fileno(ATANNOTCONFIG));
 	unless (open ATANNOTCONFIG, "<", $ATannot_config) {
@@ -1790,58 +1826,53 @@ sub AnnotationTransfer {
 		next if ($ATline=~/^#/);
 		my @ATarr=();
 		@ATarr=split(/\t/, $ATline);
-		unless (scalar(@ATarr)>=4) {
-			print STDERR $ATsubinfo, "Error: invalid elements (>=3) at annotation config file line($ATlinenum):$ATline\n";
+		unless (scalar(@ATarr)==6) {
+			print STDERR $ATsubinfo, "Error: invalid elements (NumColumn(", scalar(@ATarr), ")!=6) at annotation config file line($ATlinenum):$ATline\n";
 			return $GffKit_failure;
 		}
 		unless(defined $ATarr[0] and $ATarr[0]=~/^\S+$/) {
-			print STDERR $ATsubinfo, "Error: invalid seqID(col1) at annotation config file line($ATlinenum):$ATline\n";
-			return $GffKit_failure;
-		}
-		if (exists $ATconfig_hash{$ATarr[0]}) {
-			print STDERR $ATsubinfo, "Error: duplicate seqID(col1) at annotation config file line($ATlinenum):$ATline\n";
+			print STDERR $ATsubinfo, "Error: invalid target seqID(col1) at annotation config file line($ATlinenum):$ATline\n";
 			return $GffKit_failure;
 		}
 		unless (defined $ATarr[1] and $ATarr[1]=~/^\d+$/ and $ATarr[1]>0) {
-			print STDERR $ATsubinfo, "Error: invalid seq length (col2) at annotation config file line($ATlinenum):$ATline\n";
+			print STDERR $ATsubinfo, "Error: invalid Position(col2) at annotation config file line($ATlinenum):$ATline\n";
 			return $GffKit_failure;
 		}
-		unless (defined $ATarr[2] and $ATarr[2]=~/^\d+$/ and $ATarr[2]>0) {
-			print STDERR $ATsubinfo, "Error: invalid Position(col3) at annotation config file line($ATlinenum):$ATline\n";
+		unless(defined $ATarr[2] and $ATarr[2]=~/^\S+$/) {
+			print STDERR $ATsubinfo, "Error: invalid previous seqID(col3) at annotation config file line($ATlinenum):$ATline\n";
 			return $GffKit_failure;
 		}
-		unless (defined $ATarr[3] and $ATarr[3]=~/^[+\-0-1]$/) {
+		if (exists $ATconfig_hash{$ATarr[2]}) {
+			print STDERR $ATsubinfo, "Error: duplicate seqID(col1) at annotation config file line($ATlinenum):$ATline\n";
+			return $GffKit_failure;
+		}
+		unless (defined $ATarr[3] and $ATarr[3]=~/^[+\-01]{1,1}$/) {
 			print STDERR $ATsubinfo, "Error: invalid Strand(col4) at annotation config file line($ATlinenum):$ATline\n";
 			return $GffKit_failure;
 		}
-		if (defined $ATarr[4]) {
-			unless ($ATarr[4]=~/^\d+$/ and $ATarr[4]>=0) {
-				print STDERR $ATsubinfo, "Error: invalid 5'end cutoff (col5) at annotation config file line($ATlinenum):$ATline\n";
-				return $GffKit_failure;
-			}
+		unless (defined $ATarr[4] and $ATarr[4]=~/^\d+$/ and $ATarr[4]>=0) {
+			print STDERR $ATsubinfo, "Error: invalid previous start (col5) at annotation config file line($ATlinenum):$ATline\n";
+			return $GffKit_failure;
 		}
-		else {
-			$ATarr[4]=0;
+		unless (defined $ATarr[5] and $ATarr[5]=~/^\d+$/ and $ATarr[5]>=0) {
+			print STDERR $ATsubinfo, "Error: invalid previoud end (col6) at annotation config file line($ATlinenum):$ATline\n";
+			return $GffKit_failure;
 		}
-		if (defined $ATarr[5]) {
-			unless ($ATarr[5]=~/^\d+$/ and $ATarr[5]>=0) {
-				print STDERR $ATsubinfo, "Error: invalid 3'end cutoff (col5) at annotation config file line($ATlinenum):$ATline\n";
-				return $GffKit_failure;
-			}
-		}
-		else {
-			$ATarr[5]=0;
+		unless ($ATarr[4]<=$ATarr[5]) {
+			print STDERR $ATsubinfo, "Error: previoud start (col5) > end (col6) at annotation config file line($ATlinenum):$ATline\n";
+			return $GffKit_failure;
 		}
 		$ATvalidlinenum++;
-		$ATconfig_hash{$ATarr[0]}{'len'}=$ATarr[1];
-		$ATconfig_hash{$ATarr[0]}{'loc'}=$ATarr[2];
-		$ATconfig_hash{$ATarr[0]}{'std'}=$ATarr[3];
-		$ATconfig_hash{$ATarr[0]}{'co5'}=$ATarr[4];
-		$ATconfig_hash{$ATarr[0]}{'co3'}=$ATarr[5];
+		$ATconfig_hash{$ATarr[2]}{'tar'}=$ATarr[0];
+		$ATconfig_hash{$ATarr[2]}{'loc'}=$ATarr[1];
+		$ATconfig_hash{$ATarr[2]}{'std'}=$ATarr[3];
+		$ATconfig_hash{$ATarr[2]}{'co5'}=$ATarr[4];
+		$ATconfig_hash{$ATarr[2]}{'co3'}=$ATarr[5];
 	}
 	close ATANNOTCONFIG;
 	print $ATsubinfo, "Info: Read GFF3 config lines: $ATlinenum\n";
 	print $ATsubinfo, "Info:     valid config lines: $ATvalidlinenum\n";
+	print $ATsubinfo, "\n";
 
 	$ATlinenum=0;
 	$ATvalidlinenum=0;
@@ -1853,6 +1884,11 @@ sub AnnotationTransfer {
 	close ATGFFOUT if (defined fileno(ATGFFOUT));
 	unless (open ATGFFOUT, ">", $ATgffout) {
 		print STDERR $ATsubinfo, "Error: can not write GFF3 output file\n";
+		return $GffKit_failure;
+	}
+	close ATGFF_EXCLUDE if (defined fileno(ATGFF_EXCLUDE));
+	unless (open ATGFF_EXCLUDE, ">", "$ATgffout.excluded") {
+		print STDERR $ATsubinfo, "Error: can not write GFF3 EXCLUDED output file\n";
 		return $GffKit_failure;
 	}
 	while (my $ATline=<ATGFFIN>) {
@@ -1867,30 +1903,52 @@ sub AnnotationTransfer {
 		@ATarr=split(/\t/, $ATline);
 		unless (exists $ATconfig_hash{$ATarr[0]}) {
 			print STDERR $ATsubinfo, "Warnings: ignored sequence ID as no config1: $ATarr[0]\n";
+			print ATGFF_EXCLUDE $ATline, "\n"; $ATexcluded_linenum++;
 			next;
 		}
-		unless (exists $ATconfig_hash{$ATarr[0]}{'loc'} and exists $ATconfig_hash{$ATarr[0]}{'std'}) {
-			print STDERR $ATsubinfo, "Warnings: ignored sequence ID as no config2: $ATarr[0]\n";
+		unless (exists $ATconfig_hash{$ATarr[0]}{'tar'} and $ATconfig_hash{$ATarr[0]}{'loc'}=~/^\S+$/) {
+			print STDERR $ATsubinfo, "Warnings: ignored sequence ID as no target: $ATarr[0]\n";
+			print ATGFF_EXCLUDE $ATline, "\n"; $ATexcluded_linenum++;
 			next;
 		}
-		$ATconfig_hash{$ATarr[0]}{'co5'}=0 unless (exists $ATconfig_hash{$ATarr[0]}{'co5'});
-		$ATconfig_hash{$ATarr[0]}{'co3'}=0 unless (exists $ATconfig_hash{$ATarr[0]}{'co3'});
-		
-		unless ($ATarr[3]>$ATconfig_hash{$ATarr[0]}{'co5'} and $ATarr[3]<=($ATconfig_hash{$ATarr[0]}{'len'}-$ATconfig_hash{$ATarr[0]}{'co3'})) {
-			print STDERR $ATsubinfo, "Error: coord not in range line($ATlinenum): $ATline\n";
-			return $GffKit_failure;
+		unless (exists $ATconfig_hash{$ATarr[0]}{'loc'} and $ATconfig_hash{$ATarr[0]}{'loc'}=~/^\d+$/ and $ATconfig_hash{$ATarr[0]}{'loc'}>0) {
+			print STDERR $ATsubinfo, "Warnings: ignored sequence ID as no new start: $ATarr[0]\n";
+			print ATGFF_EXCLUDE $ATline, "\n"; $ATexcluded_linenum++;
+			next;
 		}
-		unless ($ATarr[4]>$ATconfig_hash{$ATarr[0]}{'co5'} and $ATarr[4]<=($ATconfig_hash{$ATarr[0]}{'len'}-$ATconfig_hash{$ATarr[0]}{'co3'})) {
-			print STDERR $ATsubinfo, "Error: coord not in range line($ATlinenum): $ATline\n";
-			return $GffKit_failure;
+		unless (exists $ATconfig_hash{$ATarr[0]}{'std'} and $ATconfig_hash{$ATarr[0]}{'std'}=~/^[+\-0-1]{1,1}$/) {
+			print STDERR $ATsubinfo, "Warnings: ignored sequence ID as no strand: $ATarr[0]\n";
+			print ATGFF_EXCLUDE $ATline, "\n"; $ATexcluded_linenum++;
+			next;
 		}
+		unless (exists $ATconfig_hash{$ATarr[0]}{'co5'} and $ATconfig_hash{$ATarr[0]}{'co5'}=~/^\d+$/ and $ATconfig_hash{$ATarr[0]}{'co5'}>0) {
+			print STDERR $ATsubinfo, "Warnings: ignored sequence ID as no previous start: $ATarr[0]\n";
+			print ATGFF_EXCLUDE $ATline, "\n"; $ATexcluded_linenum++;
+			next;
+		}
+		unless (exists $ATconfig_hash{$ATarr[0]}{'co3'} and $ATconfig_hash{$ATarr[0]}{'co3'}=~/^\d+$/ and $ATconfig_hash{$ATarr[0]}{'co3'}>0) {
+			print STDERR $ATsubinfo, "Warnings: ignored sequence ID as no previous end: $ATarr[0]\n";
+			print ATGFF_EXCLUDE $ATline, "\n"; $ATexcluded_linenum++;
+			next;
+		}
+		unless ($ATarr[3]>=$ATconfig_hash{$ATarr[0]}{'co5'} and $ATarr[3]<=$ATconfig_hash{$ATarr[0]}{'co3'}) {
+			print STDERR $ATsubinfo, "Info: coord (col4) not in range line($ATlinenum): $ATline\n";
+			print ATGFF_EXCLUDE $ATline, "\n"; $ATexcluded_linenum++;
+			next;
+		}
+		unless ($ATarr[4]>=$ATconfig_hash{$ATarr[0]}{'co5'} and $ATarr[4]<=$ATconfig_hash{$ATarr[0]}{'co3'}) {
+			print STDERR $ATsubinfo, "Info: coord (col5) not in range line($ATlinenum): $ATline\n";
+			print ATGFF_EXCLUDE $ATline, "\n"; $ATexcluded_linenum++;
+			next;
+		}
+
 		if ($ATconfig_hash{$ATarr[0]}{'std'} eq '+') {
-			$ATarr[3] = $ATconfig_hash{$ATarr[0]}{'loc'}+ $ATarr[3] -1-$ATconfig_hash{$ATarr[0]}{'co5'};
-			$ATarr[4] = $ATconfig_hash{$ATarr[0]}{'loc'}+ $ATarr[4] -1-$ATconfig_hash{$ATarr[0]}{'co5'};
+			$ATarr[3] = $ATconfig_hash{$ATarr[0]}{'loc'}+ $ATarr[3]-$ATconfig_hash{$ATarr[0]}{'co5'};
+			$ATarr[4] = $ATconfig_hash{$ATarr[0]}{'loc'}+ $ATarr[4]-$ATconfig_hash{$ATarr[0]}{'co5'};
 		}
 		elsif ($ATconfig_hash{$ATarr[0]}{'std'} eq '-') {
-			my $ATtemp=$ATconfig_hash{$ATarr[0]}{'loc'} + ($ATconfig_hash{$ATarr[0]}{'len'}-$ATconfig_hash{$ATarr[0]}{'co3'}-$ATarr[4]+1) +1;
-			$ATarr[4] = $ATconfig_hash{$ATarr[0]}{'loc'} + ($ATconfig_hash{$ATarr[0]}{'len'}-$ATconfig_hash{$ATarr[0]}{'co3'}-$ATarr[3]+1) +1;
+			my $ATtemp=$ATconfig_hash{$ATarr[0]}{'loc'} + ($ATconfig_hash{$ATarr[0]}{'co3'}-$ATarr[4]);
+			$ATarr[4] = $ATconfig_hash{$ATarr[0]}{'loc'} + ($ATconfig_hash{$ATarr[0]}{'co3'}-$ATarr[3]);
 			$ATarr[3]=$ATtemp;
 			if ($ATarr[6] eq '+') {
 				$ATarr[6] = '-';
@@ -1903,16 +1961,300 @@ sub AnnotationTransfer {
 				return $GffKit_failure;
 			}
 		}
+		$ATarr[0]=$ATconfig_hash{$ATarr[0]}{'tar'};
 		$ATvalidlinenum++;
 		print ATGFFOUT join("\t", @ATarr), "\n";
 	}
 	close ATGFFIN;
 	close ATGFFOUT;
+	close ATGFF_EXCLUDE;
 	print $ATsubinfo, "Info: read GFF3 lines: $ATlinenum\n";
 	print $ATsubinfo, "Info:     valid lines: $ATvalidlinenum\n";
+	print $ATsubinfo, "Info:  Excluded lines: $ATexcluded_linenum\n";
+	print $ATsubinfo, "\n";
 
 	return $GffKit_success;
 }
+
+
+
+### order genenames by scaffold order
+### SortGeneOrder($gff3_genelist_in, $order_in, $gene_order_out)
+### order: [tab-delimited]
+#seq1	+
+#seq2	-
+#seq3	+
+### gff3.genelist
+#grep -E "\tgene\t" xxx.gff3 > gff3.genelist
+### Dependency:
+### Global:
+### Note:
+sub SortGeneOrder {
+	my ($SGOgenelist_in, $SGOorder_in, $SGOgeneorder_out)=@_;
+	
+	my $SGOsubinfo='SUB(GffKit::SortGeneOrder)';
+	my $SGOlinenum=0;
+	my %SGOseq2gene=(); ### ($seq1 => ($pos1 => $linenum1++, $pos2 => $linenum2++), )
+	my %SGOline2gene=(); ### ($linenum1 => $gff3_gene_line1)
+	my %SGOseq2order=();
+	my @SGOseqorder=();
+	my $SGOnum_valid_lines=0;
+	local *SGO_ORDER_IN1; local *SGO_GENELIST_IN2; local *SGO_GENEORDER_OUT;
+	
+	unless (defined $SGOorder_in and -s $SGOorder_in) {
+		print STDERR $SGOsubinfo, "Error: invalid order input\n";
+		return $GffKit_failure;
+	}
+	unless (defined $SGOgenelist_in and -s $SGOgenelist_in) {
+		print STDERR $SGOsubinfo, "Error: invalid genelist input\n";
+		return $GffKit_failure;
+	}
+	unless (defined $SGOgeneorder_out) {
+		print STDERR $SGOsubinfo, "Error: invalid geneorder output\n";
+		return $GffKit_failure;
+	}
+	unlink $SGOgeneorder_out if (-e $SGOgeneorder_out);
+
+	close SGO_ORDER_IN1 if (defined fileno(SGO_ORDER_IN1));
+	unless (open SGO_ORDER_IN1, "<", "$SGOorder_in") {
+		print STDERR $SGOsubinfo, "Error: can not open order input\n";
+		return $GffKit_failure;
+	}
+	while (my $SGOline=<SGO_ORDER_IN1>) {
+		$SGOlinenum++;
+		chomp $SGOline;
+		my @SGOarr=split(/\t/, $SGOline);
+		unless (defined $SGOarr[1] and $SGOarr[1]=~/^[-+]{1,1}$/) {
+			print STDERR $SGOsubinfo, "Error: invalid geneorder line($SGOlinenum): $SGOline\n";
+			return $GffKit_failure;
+		}
+		if (exists $SGOseq2order{$SGOarr[0]}) {
+			print STDERR $SGOsubinfo, "Error: duplicated geneorder line($SGOlinenum): $SGOline\n";
+			return $GffKit_failure;
+		}
+		$SGOseq2order{$SGOarr[0]}=$SGOarr[1];
+		push (@SGOseqorder, $SGOarr[0]);
+		push (@SGOseqorder, $SGOarr[1]);
+	}
+	close SGO_ORDER_IN1;
+	print $SGOsubinfo, "Info: SUMMARY1: seq_order\n";
+	print $SGOsubinfo, "      Total lines:       $SGOlinenum\n";
+	print $SGOsubinfo, "      Total seq hash:    ", scalar(keys %SGOseq2order), "\n";
+	print $SGOsubinfo, "      Total order array: ", scalar(@SGOseqorder)/2, "\n";
+	print $SGOsubinfo, "\n";
+
+	$SGOlinenum=0;
+	close SGO_GENELIST_IN2 if (defined fileno(SGO_GENELIST_IN2));
+	unless (open SGO_GENELIST_IN2, "<", $SGOgenelist_in) {
+		print STDERR $SGOsubinfo, "Error: can not open genelist input\n";
+		return $GffKit_failure;
+	}
+	while (my $SGOline=<SGO_GENELIST_IN2>) {
+		$SGOlinenum++;
+		chomp $SGOline;
+		my @SGOarr=split(/\t/, $SGOline);
+		unless (scalar(@SGOarr)==9) {
+			print STDERR $SGOsubinfo, "Error: invalid GFF3 line($SGOlinenum): $SGOline\n";
+			return $GffKit_failure;
+		}
+		unless (defined $SGOarr[3] and $SGOarr[3]=~/^\d+$/) {
+			print STDERR $SGOsubinfo, "Error: invalid GFF3 start at line($SGOlinenum): $SGOline\n";
+			return $GffKit_failure;
+		}
+		unless (defined $SGOarr[4] and $SGOarr[4]=~/^\d+$/) {
+			print STDERR $SGOsubinfo, "Error: invalid GFF3 end at line($SGOlinenum): $SGOline\n";
+			return $GffKit_failure;
+		}
+		unless ($SGOarr[3]<$SGOarr[4]) {
+			print STDERR $SGOsubinfo, "Error: invalid GFF3 start<end at line($SGOlinenum): $SGOline\n";
+			return $GffKit_failure;
+		}
+		$SGOline2gene{$SGOlinenum}=$SGOline;
+		unless (exists $SGOseq2order{$SGOarr[0]}) {
+			print STDERR $SGOsubinfo, "Warning: not-ordered seq ignored at line($SGOlinenum): $SGOline\n";
+			next;
+		}
+		
+		if ($SGOseq2order{$SGOarr[0]} eq '+') {
+			$SGOseq2gene{$SGOarr[0]}{$SGOarr[3]}{$SGOlinenum}++;
+		}
+		elsif ($SGOseq2order{$SGOarr[0]} eq '-') {
+			$SGOseq2gene{$SGOarr[0]}{$SGOarr[4]}{$SGOlinenum}++;
+		}
+		else {
+			print STDERR $SGOsubinfo, "Error: invalid seq strand at line($SGOlinenum): $SGOline\n";
+			return $GffKit_failure;
+		}
+		$SGOnum_valid_lines++;
+	}
+	close SGO_GENELIST_IN2;
+	print $SGOsubinfo, "Info: SUMMARY1: genelist\n";
+	print $SGOsubinfo, "      Total lines:       $SGOlinenum\n";
+	print $SGOsubinfo, "      Valid lines:    ", $SGOnum_valid_lines, "\n";
+	print $SGOsubinfo, "\n";
+	
+	close SGO_GENEORDER_OUT if (defined fileno(SGO_GENEORDER_OUT));
+	unless (open SGO_GENEORDER_OUT, ">", $SGOgeneorder_out) {
+		print STDERR $SGOsubinfo, "Error: can not write gene order output\n";
+		return $GffKit_failure;
+	}
+	for (my $SGOloop=0; $SGOloop<scalar(@SGOseqorder); $SGOloop+=2) {
+		my $SGOind_seqid=$SGOseqorder[$SGOloop];
+		my $SGOind_strand=$SGOseqorder[$SGOloop+1];
+		unless (exists $SGOseq2gene{$SGOind_seqid}) {
+			print STDERR $SGOsubinfo, "Info: seq no gene: $SGOind_seqid\n";
+			next;
+		}
+		if ($SGOind_strand eq '+') {
+			foreach my $SGOpos1 (sort {$a<=>$b} keys %{$SGOseq2gene{$SGOind_seqid}}) {
+				foreach my $SGOind_linenum (sort {$a<=>$b} keys %{$SGOseq2gene{$SGOind_seqid}{$SGOpos1}}) {
+					unless (exists $SGOline2gene{$SGOind_linenum}) {
+						print STDERR $SGOsubinfo, "Error: line not exists: $SGOind_linenum\n";
+						return $GffKit_failure;
+					}
+					print SGO_GENEORDER_OUT $SGOline2gene{$SGOind_linenum}, "\n";
+				}
+			}
+		}
+		elsif ($SGOind_strand eq '-') {
+			foreach my $SGOpos1 (sort {$b<=>$a} keys %{$SGOseq2gene{$SGOind_seqid}}) {
+				foreach my $SGOind_linenum (sort {$a<=>$b} keys %{$SGOseq2gene{$SGOind_seqid}{$SGOpos1}}) {
+					unless (exists $SGOline2gene{$SGOind_linenum}) {
+						print STDERR $SGOsubinfo, "Error: line not exists: $SGOind_linenum\n";
+						return $GffKit_failure;
+					}
+					print SGO_GENEORDER_OUT $SGOline2gene{$SGOind_linenum}, "\n";
+				}
+			}
+		}
+		else {
+			print STDERR $SGOsubinfo, "Error: invalid strand : SEQ $SGOind_seqid STRAND $SGOind_strand\n";
+			return $GffKit_failure;
+		}
+	}
+	close SGO_GENEORDER_OUT;
+	return $GffKit_success;
+}
+
+
+
+### rename geneID after scaffolding to a pseudomolecule
+### Gff3Renamer ($gffin, $id_list, $gffout)
+### Global: 
+### Dependency:
+### Note:
+### $id_list (2 column: first col = old_ID; second col = new_ID)
+### old_id1	new_id1
+sub Gff3Renamer {
+	my ($GRgff3in, $GRidlist, $GRgff3out)=@_;
+
+	my $GRsubinfo='SUB(GffKit::Gff3Renamer)';
+	my %GRidconvert=();
+	my %GRnewids=();
+	my $GRlinenum=0;
+	my $GRlineout=0;
+	
+	local *GRGFF3INPUT; local *GRLIST; local *GRGFF3OUTPUT;
+
+	unless (defined $GRgff3in and -s $GRgff3in) {
+		print STDERR $GRsubinfo, "Error: invalid GFF3 input file\n";
+		return $GffKit_failure;
+	}
+	unless (defined $GRidlist and -s $GRidlist) {
+		print STDERR $GRsubinfo, "Error: invalid ID list file\n";
+		return $GffKit_failure;
+	}
+	unless (defined $GRgff3out) {
+		print STDERR $GRsubinfo, "Error: invalid GFF3 output file\n";
+		return $GffKit_failure;
+	}
+	
+	close GRLIST if (defined fileno(GRLIST));
+	unless (open (GRLIST, "<", $GRidlist)) {
+		print STDERR $GRsubinfo, "Error: can not open ID list file\n";
+		return $GffKit_failure;
+	}
+	while (my $GRline=<GRLIST>) {
+		chomp $GRline;
+		$GRlinenum++;
+		my @GRarr=split(/\t/, $GRline);
+		unless (scalar(@GRarr)>=2) {
+			print STDERR $GRsubinfo, "Error: invalid list line($GRlinenum): $GRline\n";
+			return $GffKit_failure;
+		}
+		if (exists $GRidconvert{$GRarr[0]}) {
+			print STDERR $GRsubinfo, "Error: duplicated old ID in list line($GRlinenum): $GRline\n";
+			return $GffKit_failure;
+		}
+		if (exists $GRnewids{$GRarr[1]}) {
+			print STDERR $GRsubinfo, "Error: duplicated new ID in list line($GRlinenum): $GRline\n";
+			return $GffKit_failure;
+		}
+		$GRidconvert{$GRarr[0]}=$GRarr[1];
+		$GRnewids{$GRarr[1]}++;
+	}
+	close GRLIST;
+	print $GRsubinfo, "Info: ### SUMMARY 1 ID ###\n";
+	print $GRsubinfo, "Info: total lines: $GRlinenum\n";
+	print $GRsubinfo, "Info: valid lines: ", scalar(keys %GRidconvert), "\n";
+	print $GRsubinfo, "Info: ###  ==END==  ###\n";
+
+	$GRlinenum=0;
+	close GRGFF3INPUT if (defined fileno(GRGFF3INPUT));
+	unless (open (GRGFF3INPUT, "<", $GRgff3in)) {
+		print STDERR $GRsubinfo, "Error: can not open GFF3 input file\n";
+		return $GffKit_failure;
+	}
+	close GRGFF3OUTPUT if (defined fileno(GRGFF3OUTPUT));
+	unless (open (GRGFF3OUTPUT, ">", $GRgff3out)) {
+		print STDERR $GRsubinfo, "Error: can not open GFF3 output file\n";
+		return $GffKit_failure;
+	}
+	while (my $GRline=<GRGFF3INPUT>) {
+		$GRlinenum++;
+		if ($GRline=~/^#/) {
+			print GRGFF3OUTPUT $GRline;
+			$GRlineout++;
+			next;
+		}
+		chomp $GRline;
+		my @GRarr=split(/\t/, $GRline);
+		my $GRoldid=$GRarr[8];
+		if ($GRarr[2]=~/^gene$/i) {
+			$GRoldid=~s/^.*ID=//; $GRoldid=~s/;.*$//;
+		}
+		elsif ($GRarr[2]=~/^mRNA$/i) {
+			$GRoldid=~s/^.*Parent=//; $GRoldid=~s/;.*$//;
+		}
+		elsif ($GRarr[2]=~/^exon$/i) {
+			$GRoldid=~s/^.*Parent=//; $GRoldid=~s/;.*$//; $GRoldid=~s/\.\d+$//;
+		}
+		elsif ($GRarr[2]=~/^CDS$/i) {
+			$GRoldid=~s/^.*Parent=//; $GRoldid=~s/;.*$//; $GRoldid=~s/\.\d+$//;
+		}
+		elsif ($GRarr[2]=~/^UTR$/i) {
+			$GRoldid=~s/^.*Parent=//; $GRoldid=~s/;.*$//; $GRoldid=~s/\.\d+$//;
+		}
+		else {
+			print STDERR $GRsubinfo, "Warnings: do not know how to get gene ID at line ($GRlinenum): $GRline\n";
+		}
+		unless (exists $GRidconvert{$GRoldid}) {
+			print STDERR $GRsubinfo, "Warnings: gene id not exists: $GRoldid at line ($GRlinenum): $GRline\n";
+		}
+		$GRline=~s/$GRoldid/$GRidconvert{$GRoldid}/g;
+		print GRGFF3OUTPUT $GRline, "\n";
+		$GRlineout++;
+	}
+	close GRGFF3INPUT;
+	close GRGFF3OUTPUT;
+	print $GRsubinfo, "Info: ### SUMMARY 2 GFF3 ###\n";
+	print $GRsubinfo, "Info: total input  lines: $GRlinenum\n";
+	print $GRsubinfo, "Info: total output lines: $GRlineout\n";
+	print $GRsubinfo, "Info: ###  ==END==  ###\n";
+
+	return $GffKit_success;
+}
+
 #my $GRSsubinfo='SUB(GffKit::GffReverseStrand)';
 #my $GffKit_success=1; $GffKit_failure=0; $GffKit_debug=0;
 1;
