@@ -36,6 +36,39 @@ Perl Modules:
                     --rg-id MySample1 --rg \"SM:My\" --rg \"PL:ILLUMINA\" --rg \"LB:Sample\"
     * Return: 1=Success    0=Failure
 
+=item MsfSnpLocation($MSLalignments, $MSLconfig)
+
+    * Get consensus SNP and location
+    * input: 
+              $MSLalignments={id1 => aligned_seq1, id2 => aligned_seq2, ...}
+              $MSLconfig={'keep' => {seqid1++; seqid2++, ...},
+               'diff' => {seqid3++; seqid4++, ...}
+              }
+    * ### Return: (1/0, $ret_hash)
+          $ret_hash={'position1(1-based)' => ('keep' => allele
+                                             'detail' => (seq1 => alleleA, seq2 => alleleB, ...)
+                                      )
+                     'position2(1-based)'
+                    }
+    * Example
+      Keep1 .........A...........
+      Keep2 .........A...........
+      Diff1 .........T...........
+      Diff2 .........C...........
+             will return {10 => ('keep' => 'A', 'detail' => ('Keep1' => 'A',
+                                                             'Keep2' => 'A',
+                                                             'Diff1' => 'T',
+                                                             'Diff2' => 'C'
+                                                             )
+                                )
+                         }
+
+=item ReadMsf($in.msf)
+
+    * Read GCG Multiple Sequence File (MSF) alignment and convert into array
+    * Return: (1/0, $hash)
+    *         $hash={id1 => seq1, id2 => seq2}
+
 =back
 
 =head1 FEEDBACK
@@ -74,9 +107,9 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20161103';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(Bowtie2Index Bowtie2p MummerChainNet);
-%EXPORT_TAGS = ( DEFAULT => [qw(Bowtie2Index Bowtie2p MummerChainNet)],
-                 ALL    => [qw(Bowtie2Index Bowtie2p MummerChainNet)]);
+@EXPORT_OK   = qw(Bowtie2Index Bowtie2p ReadMsf MsfSnpLocation);
+%EXPORT_TAGS = ( DEFAULT => [qw(Bowtie2Index Bowtie2p ReadMsf MsfSnpLocation)],
+                 ALL    => [qw(Bowtie2Index Bowtie2p ReadMsf MsfSnpLocation)]);
 
 
 my $AlignKit_success=1;
@@ -176,7 +209,7 @@ sub Bowtie2p {
 
 
 
-### Chain/Net 13 columns output of show-coords in mummer
+### [Not finished] Chain/Net 13 columns output of show-coords in mummer 
 ### MummerChainNet($coords_in, $coords_out, [$gap:1000], [$min_identity_percentage:0], [$min_alignlength:0])
 ### Dependency:
 ### Global:
@@ -244,11 +277,225 @@ sub MummerChainNet {
 	close MCNCOORDSIN;
 	
 	
-	
-	
 	close MCNCOORDSOUT;
 	return $AlignKit_success;
 }
+
+
+
+
+### Read GCG Multiple Sequence File (MSF) alignment and convert into array
+### ReadMsf($in.msf)
+### Return: (1/0, $hash)
+###         $hash={id1 => seq1, id2 => seq2}
+sub ReadMsf {
+	my ($RMin_msf) = @_;
+	
+	my $RMsubinfo='SUB(AlignKit::ReafMsf)';
+	my $RMtotal_len=0;
+	my $RMtotal_seq=0;
+	my %RMseqids=();
+	my $RM_test_alignment_start=0;
+	my $RM_ret_hash={};
+	my $RMlinenum=0;
+	
+	local *RM_MSF_INPUT;
+	
+	unless (defined $RMin_msf and -s $RMin_msf) {
+		print STDERR $RMsubinfo, "Error: invalid input: GCG Multiple Sequence File (MSF) alignment\n";
+		return $AlignKit_failure;
+	}
+	close RM_MSF_INPUT if (defined fileno(RM_MSF_INPUT));
+	unless (open RM_MSF_INPUT, '<', $RMin_msf) {
+		print STDERR $RMsubinfo, "Error: can not open input: GCG Multiple Sequence File (MSF) alignment\n";
+		return $AlignKit_failure;
+	}
+#PileUp
+#
+#  MSF: 1641  Type: N  Check: 0000  ..
+#
+# Name: EI3DL_2         Len: 1641  Check:  6720  Weight: 0.131006
+# Name: AET3G0165300.1  Len: 1641  Check:  5177  Weight: 0.31664
+# Name: BAC3DL_2        Len: 1641  Check:  1690  Weight: 0.31664
+# Name: EI3B_2          Len: 1641  Check:  3654  Weight: 0.117857
+# Name: EI3AL_2         Len: 1641  Check:  1091  Weight: 0.117857
+#
+#//
+#
+#EI3DL_2           .......... .......... .......... .......... ..........
+#AET3G0165300.1    .......... .......... .......... .......... ..........
+#BAC3DL_2          .......... .......... .......... .......... ..........
+#EI3B_2            GTCGGAGATG CTCTGTCAGT GGATAGTGGC CATGGACCCA CCCGTCAATC
+#EI3AL_2           .......... .......... .......... .......... ......AGTA
+	
+	while (my $RMline=<RM_MSF_INPUT>) {
+		chomp $RMline;
+		$RMlinenum++;
+		unless ($RMline=~/\S+/) {
+			next;
+		}
+		if ($RM_test_alignment_start==0) {
+			if ($RMline =~/^\s+MSF:\s+(\d+)\s+Type/) {
+				$RMtotal_len=$1;
+			}
+			if ($RMline =~/^\s+Name:\s+(\S+)\s+Len/) {
+				$RMseqids{$1}++;
+			}
+			if ($RMline eq '//') {
+				$RM_test_alignment_start=1;
+			}
+			next;
+		}
+		else {
+			if ($RMline=~/^(\S+)\s+(.*)$/) {
+				my $RMidv_id=$1;
+				my $RMidv_seq=$2;$RMidv_seq=~s/\s+//g;
+				if (exists $RMseqids{$RMidv_id}) {
+					${$RM_ret_hash}{$RMidv_id}.="$RMidv_seq";
+				}
+				else {
+					print STDERR $RMsubinfo, "Error: unknown seqid at line($RMlinenum): $RMidv_id\n";
+					return $AlignKit_failure;
+				}
+			}
+		}
+	}
+	close RM_MSF_INPUT;
+	
+	unless ($RMtotal_len=~/^\d+$/ and $RMtotal_len>0) {
+		print STDERR $RMsubinfo, "Error: alignment length not detected\n";
+		return $AlignKit_failure;
+	}
+	foreach my $RMthis_id (sort keys %{$RM_ret_hash}) {
+		my $RMthis_len=length(${$RM_ret_hash}{$RMthis_id});
+		unless ($RMthis_len==$RMtotal_len) {
+			print STDERR $RMsubinfo, "Error: un-expected length SEQID $RMthis_id EXPECTED $RMtotal_len ACTUAL $RMthis_len\n";
+			return $AlignKit_failure;
+		}
+	}
+	
+	print STDERR $RMsubinfo, "#####     SUMMMARY     #####\n";
+	print STDERR $RMsubinfo, "Total number lines    : $RMlinenum\n";
+	print STDERR $RMsubinfo, "Total Alignment length: $RMtotal_len\n";
+	print STDERR $RMsubinfo, "Total number seqIDs   : ".scalar(keys %RMseqids)."\n";
+	foreach my $RMthis_id (sort keys %{$RM_ret_hash}) {
+		print STDERR $RMsubinfo, "                    ID: ".$RMthis_id."\n";
+	}
+	return ($AlignKit_success, $RM_ret_hash);
+}
+
+
+
+### Get consensus SNP and location
+### MsfSnpLocation($MSLalignments, $MSLconfig)
+#   $MSLalignments={id1 => aligned_seq1, id2 => aligned_seq2, ...}
+#   $MSLconfig={'keep' => {seqid1++; seqid2++, ...},
+#               'diff' => {seqid3++; seqid4++, ...}
+#              }
+### Return: (1/0, $ret_hash)
+#   $ret_hash={'position1(1-based)' => ('keep' => allele
+#                                       'detail' => (seq1 => alleleA, seq2 => alleleB, ...)
+#                                      )
+#              'position2(1-based)'
+#             }
+### Global:
+### Dependency:
+### Note: 
+sub MsfSnpLocation {
+	my ($MSLalignments, $MSLconfig) =@_;
+
+	my $MSLsubinfo="SUB(AlignKit::MsfSnpLocation)";
+	my $MSLtotal_len=0;
+	my $MSLreturn_hash={};
+	my $MSLshared_hash={};
+	
+	unless (scalar(keys %{$MSLalignments})>0) {### check if empty input hash
+		print STDERR $MSLsubinfo, "Error: empty input aligned seq\n";
+		return $AlignKit_failure=0;
+	}
+	unless (scalar(keys %{$MSLalignments})>1) {### check if empty input hash
+		print STDERR $MSLsubinfo, "Error: only one input aligned seq\n";
+		return $AlignKit_failure;
+	}
+	foreach my $MSLindseq (sort keys %{$MSLalignments}) {
+		my $MSLindlen=length(${$MSLalignments}{$MSLindseq});
+		unless (defined $MSLindlen and $MSLindlen>0) {
+			print STDERR $MSLsubinfo, "Error: invalid seq length for seqID: $MSLindseq\n";
+			return $AlignKit_failure;
+		}
+		if ($MSLtotal_len==0) {
+			$MSLtotal_len=$MSLindlen;
+		}
+		else {
+			unless ($MSLindlen==$MSLtotal_len) {
+				print STDERR $MSLsubinfo, "Error: invalid seq length for seqID: $MSLindseq\n";
+				return $AlignKit_failure;
+			}
+		}
+	}
+	print STDERR $MSLsubinfo, "#####     SUMMARY     #####\n";
+	foreach my $MSLindseq (sort keys %{${$MSLconfig}{'keep'}}) {
+		unless (exists ${$MSLalignments}{$MSLindseq}) {
+			print STDERR $MSLsubinfo, "Error: not aligned seqID [keep]: $MSLindseq\n";
+			return $AlignKit_failure;
+		}
+		print STDERR $MSLsubinfo, "    keep : $MSLindseq\n";
+	}
+	foreach my $MSLindseq (sort keys %{${$MSLconfig}{'diff'}}) {
+		unless (exists ${$MSLalignments}{$MSLindseq}) {
+			print STDERR $MSLsubinfo, "Error: not aligned seqID [diff]: $MSLindseq\n";
+			return $AlignKit_failure;
+		}
+		print STDERR $MSLsubinfo, "    diff : $MSLindseq\n";
+	}
+	
+	MSLLOOP1: for (my $MSLx=0;$MSLx<$MSLtotal_len; $MSLx++) {
+		my %MSLkeep=();
+		my %MSLall=();
+		my %MSLdetail=();
+		my $MSLthis_allele='';
+#		print $MSLsubinfo, "Test1: POS $MSLx\n";### Test ###
+		foreach my $MSLindseq (sort keys %{${$MSLconfig}{'keep'}}) {
+			$MSLthis_allele=substr(${$MSLalignments}{$MSLindseq}, $MSLx, 1);
+			$MSLkeep{$MSLthis_allele}++;
+			$MSLall{$MSLthis_allele}++;
+			$MSLdetail{$MSLindseq}=$MSLthis_allele;
+		}
+		my @MSLkeep_alleles=keys %MSLkeep;
+#		print $MSLsubinfo, "Test2: POS $MSLx\t@MSLkeep_alleles\n";### Test ###
+		unless (scalar(@MSLkeep_alleles)==1 and $MSLkeep_alleles[0]=~/^[ATCGatcg]{1,1}/i) {### not keep inconsistent alleles and unclear alleles
+			next MSLLOOP1;
+		}
+#		print $MSLsubinfo, "Test3: POS $MSLx\n";### Test ###
+		$MSLthis_allele='';
+		my $MSLtest1=0;
+		foreach my $MSLindseq (sort keys %{${$MSLconfig}{'diff'}}) {
+			$MSLthis_allele=substr(${$MSLalignments}{$MSLindseq}, $MSLx, 1);
+			$MSLdetail{$MSLindseq}=$MSLthis_allele;
+			$MSLall{$MSLthis_allele}++;
+			if ($MSLthis_allele eq $MSLkeep_alleles[0]) {### same allele
+				$MSLtest1=1;
+			}
+			unless ($MSLthis_allele=~/^[ATCGatcg]{1,1}/i) {### not keep inconsistent alleles and unclear alleles
+				$MSLtest1=1;
+			}
+		}
+#		print $MSLsubinfo, "Test4: POS $MSLx\n";### Test ###
+		if ($MSLtest1==0) {
+			${$MSLreturn_hash}{$MSLx+1}{'keep'}=$MSLkeep_alleles[0];
+			%{${$MSLreturn_hash}{$MSLx+1}{'detail'}}=%MSLdetail;
+		}
+		my @MSLall_alleles=keys %MSLall;
+		unless (scalar(@MSLall_alleles)==1 and $MSLall_alleles[0]=~/^[ATCGatcg]{1,1}/i) {### not keep inconsistent alleles and unclear alleles
+			next MSLLOOP1;
+		}
+		${$MSLshared_hash}{$MSLx+1}=$MSLall_alleles[0];
+	}
+
+	return ($AlignKit_success, $MSLreturn_hash, $MSLshared_hash);
+}
+
+
 
 
 #my $BIsubinfo='SUB(AlignKit::RunBowtie2Index)';

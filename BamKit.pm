@@ -33,6 +33,13 @@ Perl Modules:
     * Convert BAM to FASTQ using bam2fastq program (https://github.com/jts/bam2fastq)
     * Return (1/0, \%hash=('R1' => $fastqR1, 'R2' => $fastqR2, 'M' => $fastqUnpaired)
 
+=item BamAtacShift($in.bam, $out.bam)
+
+    * Modify BAM file to adjust 9 bp for ATAC-seq: forward strand start +4 and reverse strans start -5
+    * Require: samtools
+    * Output: Default BAMin.ATAC9shift.bam if not specified
+    * Return: 1=Success    0= Failure
+
 =item BamExtractReadsUsingBed($inputbam, $file_region, $outreadname[, $path_samtools])
 
     * Extract reads in a BAM file using specified region
@@ -53,6 +60,13 @@ Perl Modules:
 =item BamKeepBothMates ($input.R1.bam, $input.R2.bam, $paired.R1.bam, $paired.R2.bam, [$unpaired.R1.bam], [$unpaired.R2.bam], [path_samtools])
 
     * Keep alignments that have both mates mapped
+    * Return: 1=Success    0=Failure
+
+=item BamKeepNumAlignemnts(In.name-sorted.bam, $k [default:1], out.bam)
+
+    * Remove alignment >k mapping times from BAM
+    * Require: samtools
+    * Note: need to double times for paired end, so k2 means unique for paired reads
     * Return: 1=Success    0=Failure
 
 =item CalCigarRefLength (CIGAR)
@@ -151,9 +165,9 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20170224';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs );
-%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs )],
-                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs )]);
+@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift);
+%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift)],
+                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift)]);
 
 
 
@@ -1806,6 +1820,301 @@ sub BamMarkPairs {
 
 
 
+### remove alignment >k mapping times from BAM
+### BamKeepNumAlignemnts(In.name-sorted.bam, $times[1], out.bam)
+### Global: $BamKit_success; $BamKit_failure;
+### Dependency:
+### CMD: samtools
+### Note: bam_col1 count >k; so k2 means unique for paired reads
+### Return: 1=Success    0= Failure
+sub BamKeepNumAlignemnts {
+	my ($BAMbamin, $BAMmax, $BAMbamout)=@_;
+	
+	my $BAMsubinfo="SUB(BamKit::BamKeepNumAlignemnts)";
+	my @BAMprint_content=();
+	my $BAMheaderline=0;
+	my $BAMnumalign_before=0;
+	my $BAMnumalign_after=0;
+	my $BAMcount=0;
+	my $BAMlast_read="";
+	unless (defined $BAMmax and $BAMmax=~/^\d+$/ and $BAMmax>0) {
+		print $BAMsubinfo, "Warnings: none-INT mapping times, use default 1\n";
+		print STDERR $BAMsubinfo, "Warnings: none-INT mapping times, use default 1\n";
+		$BAMmax=1;
+	}
+	local *BAMBAMINPUT; local *BAMBAMOUTPUT;
+	
+	unless (defined $BAMbamin and -s $BAMbamin) {
+		print STDERR $BAMsubinfo, "Error: invalid BAM input\n";
+		return $BamKit_failure;
+	}
+	unless (defined $BAMbamout) {
+		print STDERR $BAMsubinfo, "Error: invalid BAM output name\n";
+		return $BamKit_failure;
+	}
+	unlink $BAMbamout if (-e $BAMbamout);
+	
+	close BAMBAMINPUT if (defined fileno(BAMBAMINPUT));
+	unless (open BAMBAMINPUT, "samtools view -h $BAMbamin | ") {
+		print STDERR $BAMsubinfo, "Error: can not open BAM input: $BAMbamin\n";
+		return $BamKit_failure;
+	}
+	close BAMBAMOUTPUT if (defined fileno(BAMBAMOUTPUT));
+	unless (open BAMBAMOUTPUT, " | samtools view -h -b -S - > $BAMbamout") {
+		print STDERR $BAMsubinfo, "Error: can not write BAM output: $BAMbamout\n";
+		return $BamKit_failure;
+	}
+	while (my $BAMline=<BAMBAMINPUT>) {
+		chomp $BAMline;
+		$BAMnumalign_before++;
+		if ($BAMline=~/^\@/) {
+			$BAMheaderline++;
+			print BAMBAMOUTPUT $BAMline, "\n";
+			next;
+		}
+		my @BAMarr=split(/\t/, $BAMline);
+		if ($BAMlast_read eq "" and $BAMcount==0) {
+			$BAMlast_read=$BAMarr[0];
+			$BAMcount=1;
+			push (@BAMprint_content, $BAMline);
+			next;
+		}
+		if ($BAMarr[0] eq $BAMlast_read) {
+			push (@BAMprint_content, $BAMline);
+			$BAMcount++;
+		}
+		else {
+			if ($BAMcount<=$BAMmax) {
+				print BAMBAMOUTPUT join("\n", @BAMprint_content), "\n";
+				$BAMnumalign_after+=$BAMcount;
+			}
+			$BAMlast_read=$BAMarr[0];
+			$BAMcount=1;
+			@BAMprint_content=();
+			push (@BAMprint_content, $BAMline);
+		}
+	}
+	if (scalar(@BAMprint_content)>0 and $BAMcount<=$BAMmax) {
+		print BAMBAMOUTPUT join("\n", @BAMprint_content), "\n";
+		$BAMnumalign_after+=$BAMcount;
+		@BAMprint_content=();
+		$BAMcount=0;
+	}
+	close BAMBAMINPUT;
+	close BAMBAMOUTPUT;
+	
+	print $BAMsubinfo, "######## SUMMARY #########\n";
+	print $BAMsubinfo, "Max alignment         : $BAMmax\n";
+	print $BAMsubinfo, "Num header lines      : $BAMheaderline\n";
+	print $BAMsubinfo, "Num alignments before : $BAMnumalign_before\n";
+	print $BAMsubinfo, "Num alignments after  : $BAMnumalign_after\n\n";
+	
+	return $BamKit_success;
+}
+
+
+
+### submodules for BamAtacShift
+sub trimFirstCIGARunit{
+	my $TFCUcigar = shift;
+	my $TFCUfirstChar = (split/\d+/, $TFCUcigar)[1];
+	#print STDERR "$TFCUcigar\n$TFCUfirstChar\n";
+	my $TFCUfirstNum = (split/$TFCUfirstChar/, $TFCUcigar)[0];
+	my $TFCUlength =length($TFCUfirstNum.$TFCUfirstChar);
+	return(substr($TFCUcigar,$TFCUlength), $TFCUfirstNum, $TFCUfirstChar);
+}
+
+# this cuts off the last number and letter from a CIGAR string
+# and returns the trimmed CIGAR plus the number and letter trimmed off
+sub trimLastCIGARunit{
+	my $TLCUcigar = shift;
+	my $TLCUlastChar = substr($TLCUcigar,-1); # split was acting weird, so this should grab the last character
+	my $TLCUlastNum = (split/[MINDS]/, $TLCUcigar)[-1]; # these are the possible letters equalling Match, Insert, N, Deletion, Shoft clip
+	my $TLCUlength =length($TLCUlastNum.$TLCUlastChar);
+	return(substr($TLCUcigar,0,(-1*$TLCUlength)), $TLCUlastNum, $TLCUlastChar);
+}
+
+# this will take a cigar string, the strand the read maps to and a number of reads to cut off
+# it returns the properly trimmed CIGAR string
+sub CIGARtrim {
+	my ($CTcigar, $CTstrand, $CTnum) = @_;
+	
+	my $CTtoReturn;
+	my $CTsubinfo="SUB(BamKit::CIGARtrim)";
+	
+	if ($CTstrand eq '-') {
+		my ($CTcigarToKeep, $CTlastNum, $CTlastChar) = &trimLastCIGARunit($CTcigar);
+		my $CTnewLastNum = $CTlastNum - $CTnum;
+
+		if ($CTlastChar eq 'D'){ # skip to the next letter because the deletion is completely skipped over
+			($CTcigarToKeep, $CTlastNum, $CTlastChar) = &trimLastCIGARunit($CTcigarToKeep);
+			$CTnewLastNum = $CTlastNum - $CTnum;
+		}
+
+		if ($CTnewLastNum==0) {
+			my $CTnextChar = substr($CTcigarToKeep,-1);
+			if ($CTnextChar eq 'D') { # skip to the next letter because a read shouldn't end in a deletion
+				($CTcigarToKeep, $CTlastNum, $CTlastChar) = &trimLastCIGARunit($CTcigarToKeep);
+			}
+			$CTtoReturn = $CTcigarToKeep;
+		}
+		elsif ($CTnewLastNum<0) { # Not everything has been trimmed off, so iterate over this again
+			$CTtoReturn=&CIGARtrim($CTcigarToKeep,$CTstrand,-1*$CTnewLastNum);
+		}
+		else {
+			$CTtoReturn=$CTcigarToKeep.$CTnewLastNum.$CTlastChar;
+		}
+	}
+	elsif($CTstrand eq '+'){
+		# print STDERR "$CTcigar\n";
+		my ($CTcigarToKeep, $CTfirstNum, $CTfirstChar) = &trimFirstCIGARunit($CTcigar);
+		my $CTnewFirstNum = $CTfirstNum - $CTnum;
+		if ($CTfirstChar eq 'D') { # skip to the next letter because the deletion is completely skipped over
+			($CTcigarToKeep, $CTfirstNum, $CTfirstChar) = &trimFirstCIGARunit($CTcigarToKeep);
+			$CTnewFirstNum = $CTfirstNum - $CTnum;
+		}
+		if ($CTnewFirstNum==0) {
+			my $CTnextChar = substr($CTcigarToKeep,-1);
+			if ($CTnextChar eq 'D'){ # skip to the next letter because a read shouldn't end in a deletion
+				($CTcigarToKeep, $CTfirstNum, $CTfirstChar) = &trimFirstCIGARunit($CTcigarToKeep);
+			}
+			$CTtoReturn = $CTcigarToKeep;
+		}
+		elsif ($CTnewFirstNum<0) { # Not everything has been trimmed off, so iterate over this again
+			$CTtoReturn=&CIGARtrim($CTcigarToKeep,$CTstrand,-1*$CTnewFirstNum);
+		}
+		else {
+			$CTtoReturn=$CTnewFirstNum.$CTfirstChar.$CTcigarToKeep;
+		}
+	}
+
+	return ($CTtoReturn);
+}
+### Modify BAM file to adjust 9 bp for ATAC-seq: forward strand start +4 and reverse strans start -5
+### BamAtacShift($in.bam, $out.bam)
+### Global:
+### CMD: samtools
+### Output: ### Default BAMout=BAMin.ATAC9shift.bam if not specified
+### Return: 1=Success    0= Failure
+sub BamAtacShift {
+	my ($BASbam_in, $BASbam_out)=@_;
+	
+	my $BASsubinfo="SUB(BamKit::BamAtacShift)";
+	my @BASbamarr=();
+	my $BASnum_lines_header=0;
+	my $BASnum_lines_alignment_before=0;
+	my $BASnum_lines_alignment_after=0;
+	local *BASBAMINPUT; local *BASBAMOUTPUT;
+	
+	unless (defined $BASbam_in and -s $BASbam_in) {
+		print STDERR $BASsubinfo, "Error: invalid BAM input\n";
+		return $BamKit_failure;
+	}
+	unless (defined $BASbam_out) {
+		$BASbam_out="$BASbam_in.ATAC9shift.bam";
+		print STDERR $BASsubinfo, "Warnings: BAM output not specified, use default: $BASbam_out\n";
+	}
+	unlink $BASbam_out if (-e $BASbam_out);
+	
+	close BASBAMINPUT if (defined fileno(BASBAMINPUT));
+	if ($BASbam_in=~/\.bam$/i) {
+		unless (open BASBAMINPUT, "samtools view -h $BASbam_in | ") {
+			print STDERR $BASsubinfo, "Error: can not open BAM input: $BASbam_in\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BASbam_in=~/\.sam$/i) {
+		unless (open BASBAMINPUT, "samtools view -S -h $BASbam_in | ") {
+			print STDERR $BASsubinfo, "Error: can not open SAM input: $BASbam_in\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BASsubinfo, "Error: can not guess BAM/SAM input format: $BASbam_in\n";
+		return $BamKit_failure;
+	}
+	close BASBAMOUTPUT if (defined fileno(BASBAMOUTPUT)); 
+	if ($BASbam_out=~/\.bam$/i) {
+		unless (open BASBAMOUTPUT, " | samtools view -S -b -h - > $BASbam_out") {
+			print STDERR $BASsubinfo, "Error: can not write BAM output: $BASbam_out\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BASbam_out=~/\.sam$/i) {
+		unless (open BASBAMOUTPUT, " | samtools view -S -h - > $BASbam_out") {
+			print STDERR $BASsubinfo, "Error: can not write SAM output: $BASbam_out\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BASsubinfo, "Error: can not guess BAM/SAM output format: $BASbam_out\n";
+		return $BamKit_failure;
+	}
+	
+	while (my $BASline=<BASBAMINPUT>) {
+		if ($BASline=~/^\@/) {
+			print BASBAMOUTPUT $BASline;
+			$BASnum_lines_header++;
+			next;
+		}
+		$BASnum_lines_alignment_before++;
+		chomp $BASline;
+		@BASbamarr=();
+		@BASbamarr=split(/\t/, $BASline);
+		unless (defined $BASbamarr[1] and $BASbamarr[1]=~/^\d+$/ and $BASbamarr[1]>0) {
+			print STDERR $BASsubinfo, "Warnings: Ignored line as bitwise FLAG: $BASline\n";
+			next;
+		}
+		next unless ($BASbamarr[1] & 0x0002);
+		next if ($BASbamarr[1] & 0x0004);### unmapped
+		next if ($BASbamarr[1] & 0x0008);### mate unmapped
+		next if ($BASbamarr[1] & 0x0100);### not primary
+		next if ($BASbamarr[1] & 0x0200);### fail QC
+		next if ($BASbamarr[1] & 0x0400);### PCR duplicate
+		next if ($BASbamarr[1] & 0x0800);### supplementary alignments
+		if($BASbamarr[8]==0){ # just in case
+			print STDERR $BASsubinfo, "Warnings: ", $BASbamarr[0]." has a length of 0\n$_\n"; # just in case
+		}
+
+		if($BASbamarr[1] & 0x0010){ # if the read is mapped to the reverse strand
+			$BASbamarr[7]+=4; # move the mate start 4 bp
+			$BASbamarr[8]-=9; # adjust the inferred insert size
+			$BASbamarr[9]=substr($BASbamarr[9],0,-5); # remove 5 bp from the reads
+			$BASbamarr[10]=substr($BASbamarr[10],0,-5);# remove the 5bp from quality as well
+			# this is ugly, but this is a way to change the CIGAR to reflect that I'm shortening the read
+			# for the negative stran I want to subtract the 5p from the last entry (which should be M, for match)
+			$BASbamarr[5] = &CIGARtrim($BASbamarr[5],'-',5); # from the CIGAR string, trim 5, and we're on the negtive strand
+		}
+		else { # if the read is mapped to the positive strand
+			$BASbamarr[3]+=4; # move the start 4 bp
+			# these were removed, because they were incorrect, you don't actually move this end of the negative read (which this would be, because it's the mate of a positive strand read).
+			# for a negative read you just trim from the other end, the start position stays the same.
+			#$BASbamarr[7]-=5; # move the mate start 5 bp 
+			#$BASbamarr[7]=1 if ($BASbamarr[7]<=0); # just to make sure we didn't go off the end
+			$BASbamarr[8]-=9; # adjust the inferred insert size
+			$BASbamarr[9] =substr($BASbamarr[9],4);# remove 4bp from the reads
+			$BASbamarr[10] =substr($BASbamarr[10],4);# remove the 4bp from quality as well
+			# this is ugly, but this is a way to change the CIGAR to reflect that I'm shortening the read
+			# for the positive strand I want to subtract the 4 from the first entry (which should be M, for match)
+			$BASbamarr[5] = &CIGARtrim($BASbamarr[5],'+',4); # from the CIGAR string, trim 4, and we're on the positive strand
+		}
+
+		print BASBAMOUTPUT join("\t",@BASbamarr)."\n";
+		$BASnum_lines_alignment_after++;
+	}
+
+	close BASBAMINPUT;
+	close BASBAMOUTPUT;
+
+	print $BASsubinfo, "Info: ############ SUMMARY ##############\n";
+	print $BASsubinfo, "Info: BAM input  : $BASbam_in\n";
+	print $BASsubinfo, "Info: BAM output : $BASbam_out\n";
+	print $BASsubinfo, "Info: Num headers: $BASnum_lines_header\n";
+	print $BASsubinfo, "Info: Num Alignments before : $BASnum_lines_alignment_before\n";
+	print $BASsubinfo, "Info: Num Alignments after  : $BASnum_lines_alignment_after\n\n";
+
+	return $BamKit_success;
+}
 
 
 ### 
@@ -1814,5 +2123,6 @@ sub BamMarkPairs {
 ### Dependency:
 ### Note:
 ### Return: 1=Success    0= Failure
+#my $BMPsubinfo='SUB(BamKit::BamMarkPairs)';
 1;
 __END__
