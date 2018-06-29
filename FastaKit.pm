@@ -115,6 +115,24 @@ Fasta -related tools
     * Note: 0,1,2 forsword strand: shift 0/1/2 base from 5 end
     * Note: 3,4,5 reverse complement strand: shift 0/1/2 base from 5 end
 
+=item GetCdnaSeq($fasta,$exon)
+
+    * Get cDNA seq from  %exon (GffKit::ReadGff3)
+    * %exon=($mrnaid => ('reference' => $arr[0],
+                         'exon' => ({$arr[3]} => ($arr[4] => $exonid)),
+                         'strand'    => $arr[6],
+                         'score'     => $arr[5]
+                        )
+            )### from GffKit::ReadGff3
+    * Dependency: Bio::DB::Fasta, SeqRevComp
+    * Return: (1/0, %cDNA)
+            %cDNA=($mrnaid => ('reference' => $arr[0],
+                               'exon' => ({$arr[3]} => ($arr[4] => $exonid)),
+                               'seq'       => $cDNA_seq
+                               'strand'    => $arr[6],
+                               'score'     => $arr[5]
+                  )
+
 =item GuessFormat ($input.seq)
 
     * Guess sequence file format from extension names
@@ -252,13 +270,14 @@ use FuhaoPerl5Lib::FileKit qw/MoveFile RetrieveDir MergeFiles/;
 use FuhaoPerl5Lib::CmdKit;
 use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
 use Bio::SeqIO;
+use Bio::DB::Fasta;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20171205';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords);
-%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords)],
-                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq);
+%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq)],
+                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -1502,8 +1521,6 @@ sub SeqRevComp {
 
 
 
-
-
 ### Codon2AA
 ### &Code2AA('$codon')
 ### Global:
@@ -1577,7 +1594,7 @@ sub Frame3Translation {
 			${$FTaa}{$FTframe}.=&Codon2AA($FTcodon);
 		}
 	}
-	
+
 	return $FTaa;
 }
 
@@ -2173,7 +2190,6 @@ sub SspaceOutRenamer {
 ### QRY2                                              gggggggggggAAAAAAAAAAAA
 ###                                                              12         23
 ###Return \%hash={$groupnum => [QRYstrand, QRY:1-14, REFstrand, REF:1-38, QRY2strand, QRY2:12-23}
-
 sub AnalyzeMummerShowcoords {
 	my ($AMSshow_coords_out)=shift;
 
@@ -2885,7 +2901,104 @@ sub RandomDNAgenerator {
 
 
 
+### Get cDNA seq from  %exon (GffKit::ReadGff3)
+### GetCdnaSeq($fasta,$exon)
+### %exon=($mrnaid => ('reference' => $arr[0],
+###                    'exon' => ({$arr[3]} => ($arr[4] => $exonid)),
+###                    'strand'    => $arr[6],
+###                    'score'     => $arr[5]
+###                    )
+###       )### from GffKit::ReadGff3
+### Dependency: Bio::DB::Fasta, SeqRevComp
+### Global:
+### Note:
+### Return: (1/0, %cDNA)
+### return: %cDNA=($mrnaid => ('reference' => $arr[0],
+###                            'exon' => ({$arr[3]} => ($arr[4] => $exonid)),
+###                            'seq'       => $cDNA_seq
+###                            'strand'    => $arr[6],
+###                            'score'     => $arr[5]
+###               )
+sub GetCdnaSeq {
+	my ($GCSfasta,$GCSexon) =@_;
 
+	my $GCSsubinfo="SUB(FastaKit::Gff3Renamer)";
+	my $GCSexons={};
+	my $GCScds={};
+	my $GCScdnaseq={};
+	my $GCSseqdb;
+	my $GCSind_exon_seq='';
+	my $GCSind_strand='';
+	my $GCSind_score='.';
+	my $GCSind_ref='';
+	my $GCScdna_seq='';
+
+	unless (defined $GCSfasta and -s $GCSfasta) {
+		print STDERR $GCSsubinfo, "Error: invalid fasta file\n";
+		return $FastaKit_failure;
+	}
+	$GCSseqdb=Bio::DB::Fasta->new($GCSfasta);
+	GCSLOOP1: foreach my $GCSmra_id (sort keys %{$GCSexon}) {
+		$GCScdna_seq='';
+		$GCSind_strand='';
+		$GCSind_score='.';
+		$GCSind_ref='';
+		unless (exists ${$GCSexon}{$GCSmra_id} and exists ${$GCSexon}{$GCSmra_id}{'reference'} and ${$GCSexon}{$GCSmra_id}{'reference'}=~/^\S+$/) {
+			print STDERR $GCSsubinfo, "Warnings: no reference seq: mRNA_ID $GCSmra_id\n";
+			next GCSLOOP1;
+		}
+		$GCSind_ref=${$GCSexon}{$GCSmra_id}{'reference'};
+		unless (exists ${$GCSexon}{$GCSmra_id} and exists ${$GCSexon}{$GCSmra_id}{'strand'} and ${$GCSexon}{$GCSmra_id}{'strand'}=~/^[\-+]{1,1}$/) {
+			print STDERR $GCSsubinfo, "Warnings: no strand: mRNA_ID $GCSmra_id\n";
+			next GCSLOOP1;
+		}
+		$GCSind_strand=${$GCSexon}{$GCSmra_id}{'strand'};
+		unless (exists ${$GCSexon}{$GCSmra_id} and exists ${$GCSexon}{$GCSmra_id}{'exon'} and scalar(keys %{${$GCSexon}{$GCSmra_id}{'exon'}})>0) {
+			print STDERR $GCSsubinfo, "Warnings: no exons: mRNA_ID $GCSmra_id\n";
+			next GCSLOOP1;
+		}
+		if (exists ${$GCSexon}{$GCSmra_id} and exists ${$GCSexon}{$GCSmra_id}{'score'} and ${$GCSexon}{$GCSmra_id}{'score'}=~/\S+/) {
+			$GCSind_score=${$GCSexon}{$GCSmra_id}{'score'};
+		}
+		my $GCStest1=0;
+		my $GCScdna_exp_len=0;
+		foreach my $GCSstart (sort {$a<=>$b} keys %{${$GCSexon}{$GCSmra_id}{'exon'}}) {
+			my @GCStemparr=();
+			@GCStemparr=keys %{${$GCSexon}{$GCSmra_id}{'exon'}{$GCSstart}};
+			unless (scalar(@GCStemparr)==1 and defined $GCStemparr[0] and $GCStemparr[0]=~/^\d+$/) {
+				print STDERR $GCSsubinfo, "Warnings: invalid exon right: mRNA_ID $GCSmra_id EXON LEFT $GCSstart\n";
+				$GCStest1=1;last;
+			}
+			my $end=$GCStemparr[0];
+			$GCSind_exon_seq=$GCSseqdb->seq($GCSind_ref, $GCSstart, $end);
+			unless (length($GCSind_exon_seq) == ($end-$GCSstart+1)) {
+				print STDERR $GCSsubinfo, "Warnings: invalid exon seq length: mRNA_ID $GCSmra_id EXON LEFT $GCSstart RIGHT $end SEQUENCE $GCSind_exon_seq\n";
+				$GCStest1=1;last;
+			}
+			$GCScdna_seq.=$GCSind_exon_seq;
+			$GCScdna_exp_len=$GCScdna_exp_len+$end-$GCSstart+1;
+		}
+		
+		if ($GCScdna_seq eq '' or length($GCScdna_seq)==0) {
+			print STDERR $GCSsubinfo, "Warnings: no cDNA seq: mRNA_ID $GCSmra_id\n";
+			next GCSLOOP1;
+		}
+		unless (length($GCScdna_seq) == $GCScdna_exp_len) {
+			print STDERR $GCSsubinfo, "Warnings: cDNA not expected length: mRNA_ID $GCSmra_id\n";
+			next GCSLOOP1;
+		}
+		if ($GCStest1==0) {
+			$GCScdna_seq=&SeqRevComp($GCScdna_seq) if ($GCSind_strand eq '-');
+			${$GCScdnaseq}{$GCSmra_id}{'reference'}=$GCSind_ref;
+			${$GCScdnaseq}{$GCSmra_id}{'strand'}=$GCSind_strand;
+			${$GCScdnaseq}{$GCSmra_id}{'score'}=$GCSind_score;
+			${$GCScdnaseq}{$GCSmra_id}{'seq'}=$GCSind_score;
+			${$GCScdnaseq}{$GCSmra_id}{'exon'}=${$GCSexon}{$GCSmra_id}{'exon'};
+		}
+	}
+	
+	return ($FastaKit_success, $GCScdnaseq);
+}
 
 ### 
 ### 
