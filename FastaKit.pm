@@ -272,7 +272,7 @@ use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
 use Bio::SeqIO;
 use Bio::DB::Fasta;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20171205';
+$VERSION     = '20180629';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq);
