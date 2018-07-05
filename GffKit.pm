@@ -44,7 +44,18 @@ Perl Modules:
     * Return: 1=Sucesss    0=Failure
     * Note: reference.fa needs samtools while reference.fa.fai donot
 
-=item WriteGff3 (output.gff3, \%(gene))
+=item GuessLongestCDS {
+
+    * Predict top INT CDSs
+    * GuessLongestCDS($GLCfasta, $mrna, $exon, $num_top)
+    *     $mrna, $exon are ReadGff3 objects
+    *     GLCnum_top is the top INT, how many top longest you want
+    * Return: (1/0, $gene2mrna, $mrna, $exon, $cdss);
+
+=item WriteGff3 ($EGoutgff3, $WGref2gene, $WGgene2mrna, $WGgene, $WGmrna, $WGexon, $WGcds)
+
+    * Write ReadGff3 object to GFF3 file
+    * Return: 1=Sucesss    0=Failure
 
 
 =item SortGeneOrder($gff3_genelist_in, $order_in, $gene_order_out)
@@ -89,16 +100,17 @@ use strict;
 use warnings;
 use Exporter;
 use Cwd;
-use FuhaoPerl5Lib::FastaKit qw/IndexFasta Frame3Translation SeqRevComp/;
+use FuhaoPerl5Lib::FastaKit qw/IndexFasta Frame3Translation SeqRevComp GetCdnaSeq/;
 use Bio::DB::Fasta;
 use Data::Dumper qw/Dumper/;
+use Storable qw/dclone/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20180403';
+$VERSION     = '20180629';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer);
-%EXPORT_TAGS = ( DEFAULT => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer)],
-                 ALL    => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer)]);
+@EXPORT_OK   = qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer GuessLongestCDS);
+%EXPORT_TAGS = ( DEFAULT => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer GuessLongestCDS)],
+                 ALL    => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer GuessLongestCDS)]);
 
 my $GffKit_success=1;
 my $GffKit_failure=0;
@@ -251,15 +263,16 @@ sub GffReverseStrand {
 ###                   )
 ###       )
 ### %mrnas=($geneid => ('reference' => $arr[0],
-###                     'start'      => $arr[3], 
-###                     'end'        => $arr[4],
-###                     'strand'     => $arr[6],
-###                     'score'      => $arr[5],
-###                     'Note'       => $note ###Not necessarily exist
+###                     'start'     => $arr[3], 
+###                     'end'       => $arr[4],
+###                     'strand'    => $arr[6],
+###                     'score'     => $arr[5],
+###                     'Note'      => $note ###Not necessarily exist
+###                     'parent'    => $geneID
 ###                    )
 ###       )
 ### %exon=($mrnaid => ('reference' => $arr[0],
-###                    'exon' => ({$arr[3]} => ($arr[4] => $exonid)),
+###                    'exon'      => ({$arr[3]} => ($arr[4] => $exonid)),
 ###                    'strand'    => $arr[6],
 ###                    'score'     => $arr[5]
 ###                    )
@@ -356,6 +369,8 @@ sub ReadGff3 {
 		elsif ($RGarr[2] =~ /^mRNA$/i) {
 			my $RGthismrnaid=$RGarr[8];
 			$RGthismrnaid=~s/^.*ID=//; $RGthismrnaid=~s/;.*$//;
+			my $RGparent=$RGarr[8];
+			$RGparent=~s/^.*Parent=//; $RGparent=~s/;.*$//;
 			if (exists ${$RGmrnas}{$RGthismrnaid}) {
 				print STDERR $RGsubinfo, "Error: duplicated mRNA ID: $RGthismrnaid\n";
 				return  $GffKit_failure;
@@ -365,13 +380,9 @@ sub ReadGff3 {
 			${$RGmrnas}{$RGthismrnaid}{'strand'}=$RGarr[6];
 			${$RGmrnas}{$RGthismrnaid}{'score'}=$RGarr[5];
 			${$RGmrnas}{$RGthismrnaid}{'reference'}=$RGarr[0];
-			my $RGparent=$RGarr[8];
-			$RGparent=~s/^.*Parent=//; $RGparent=~s/;.*$//;
-			my @RGtemparr=split(/,/, $RGparent);
-			foreach my $RGindpar (@RGtemparr) {
-				${$RGgene2mrna}{$RGindpar}{$RGthismrnaid}++;
-				$RGmrna2gene{$RGthismrnaid}{$RGindpar}++;
-			}
+			${$RGmrnas}{$RGthismrnaid}{'parent'}=$RGparent;
+			${$RGgene2mrna}{$RGparent}{$RGthismrnaid}++;
+			$RGmrna2gene{$RGthismrnaid}{$RGparent}++;
 			if ($RGarr[8]=~/Note=(\S+)/) {
 				my $RGnotes=$1;
 				$RGnotes=~s/;.*$//;
@@ -1326,8 +1337,8 @@ sub WriteGff3 {
 							if (exists ${$WGexon}{$WGmrnaid}{'exon'} and 
 								(scalar(keys %{${$WGexon}{$WGmrnaid}{'exon'}})>0)
 							){
-								foreach my $WGx (keys %{${$WGexon}{$WGmrnaid}{'exon'}}) {
-									foreach my $WGy (keys %{${$WGexon}{$WGmrnaid}{'exon'}{$WGx}}) {
+								foreach my $WGx (sort {$a<=> $b} keys %{${$WGexon}{$WGmrnaid}{'exon'}}) {
+									foreach my $WGy (sort {$a<=> $b} keys %{${$WGexon}{$WGmrnaid}{'exon'}{$WGx}}) {
 										my $WGz=${$WGexon}{$WGmrnaid}{'exon'}{$WGx}{$WGy};
 										if (exists $WGexonidhash{$WGz}) {###exonid must be unique
 											if (($WGexonidhash{$WGz}[0] != $WGx) and ($WGexonidhash{$WGz}[0] != $WGy)) {
@@ -1380,8 +1391,8 @@ sub WriteGff3 {
 							if (exists ${$WGcds}{$WGmrnaid}{'cds'} and 
 								(scalar(keys %{${$WGcds}{$WGmrnaid}{'cds'}})>0)
 							){
-								foreach my $WGx (keys %{${$WGcds}{$WGmrnaid}{'cds'}}) {
-									foreach my $WGy (keys %{${$WGcds}{$WGmrnaid}{'cds'}{$WGx}}) {
+								foreach my $WGx (sort {$a<=> $b} keys %{${$WGcds}{$WGmrnaid}{'cds'}}) {
+									foreach my $WGy (sort {$a<=> $b} keys %{${$WGcds}{$WGmrnaid}{'cds'}{$WGx}}) {
 										unless ($WGy=~/^\d+$/ and $WGx=~/^\d+$/ and $WGy>=$WGx) {
 											print STDERR $WGsubinfo, "Error: CDS end > start: $WGx-$WGy for mRNA $WGmrnaid\n";
 											return $GffKit_failure;
@@ -2254,6 +2265,305 @@ sub Gff3Renamer {
 
 	return $GffKit_success;
 }
+
+
+### ### %gene2mrna     => ( $gene_id => $mrna_id => num++ )
+### %mrnas=($mrnaid => ('reference' => $arr[0],
+###                     'start'      => $arr[3], 
+###                     'end'        => $arr[4],
+###                     'strand'     => $arr[6],
+###                     'score'      => $arr[5],
+###                     'Note'       => $note ###Not necessarily exist
+###                    )
+###       )
+### %exon=($mrnaid => ('reference' => $arr[0],
+###                    'exon' => ({$arr[3]} => ($arr[4] => $exonid)),
+###                    'strand'    => $arr[6],
+###                    'score'     => $arr[5]
+###                    )
+###       )
+### %cds=($mrnaid => ('reference' => $arr[0],
+###                   'cds'       => ({$arr[3]} => ($arr[4] => num++)),
+###                   'strand'    => $arr[6],
+###                   'score'     => $arr[5],
+###                   'phase'     => ({$arr[3]} => ($arr[4] => $arr[7]))
+###                   )
+###       )
+### GuessLongestCDS($fasta, $exon, $mrna, $exon, $num_top[1])
+### Guess CDS region from %exon
+sub GuessLongestCDS {
+	my ($GLCfasta, $GLCmrna, $GLCexon, $GLCnum_top)=@_;
+	
+	my $GLCsubinfo="Sub(GffKit::GuessLongestCDS)";
+	my $GLCreturn_gene2mrna={};
+	my $GLCreturn_mrna={};
+	my $GLCreturn_exon={};
+	my $GLCreturn_cdss={};
+	
+	unless (defined $GLCfasta and -s $GLCfasta) {
+		print STDERR $GLCsubinfo, "Error: invalid fasta file\n";
+		return $GffKit_failure;
+	}
+	unless (defined $GLCnum_top and $GLCnum_top=~/^\d+$/ and $GLCnum_top>0) {
+		print STDERR $GLCsubinfo, "Error: invalid num top protein: $GLCnum_top, use default: 1\n";
+		$GLCnum_top=1;
+	}
+	
+	my ($GLCtest1, $GLCcdna)=GetCdnaSeq($GLCfasta, $GLCexon);
+	unless ($GLCtest1) {
+		print STDERR $GLCsubinfo, "Error: FuhaoPerl5Lib::FastaKit=GetCdnaSeq failed\n";
+		return $GffKit_failure;
+	}
+	
+	GLCLOOP1: foreach my $GLCind_mrna (sort keys %{$GLCcdna}) {
+		my $GLCstrnd='';
+		my $GLCgeneID='';
+		my $GLCcdnaseq='';
+		unless (exists ${$GLCmrna}{$GLCind_mrna}) {
+			print STDERR $GLCsubinfo, "Error: unknown mRNA $GLCind_mrna\n";
+			next GLCLOOP1;
+		}
+		unless (exists ${$GLCmrna}{$GLCind_mrna}{'strand'} and ${$GLCmrna}{$GLCind_mrna}{'strand'}=~/^[-+]{1,1}$/) {
+			print STDERR $GLCsubinfo, "Error: mRNA $GLCind_mrna got no strand\n";
+			next GLCLOOP1;
+		}
+		$GLCstrnd=${$GLCmrna}{$GLCind_mrna}{'strand'};
+#		print $GLCsubinfo, "Test : mRNA: $GLCind_mrna STRAND $GLCstrnd\n"; ### For Test ###
+		unless (exists ${$GLCmrna}{$GLCind_mrna}{'parent'} and ${$GLCmrna}{$GLCind_mrna}{'parent'}=~/^\S+$/) {
+			print STDERR $GLCsubinfo, "Error: mRNA $GLCind_mrna got no parent\n";
+			next GLCLOOP1;
+		}
+		$GLCgeneID=${$GLCmrna}{$GLCind_mrna}{'parent'};
+#		print $GLCsubinfo, "Test : mRNA: $GLCind_mrna STRAND $GLCstrnd GENE $GLCgeneID\n"; ### For Test ###
+		unless (exists ${$GLCcdna}{$GLCind_mrna}{'seq'} and ${$GLCcdna}{$GLCind_mrna}{'seq'}=~/^\S+$/) {
+			print STDERR $GLCsubinfo, "Error: mRNA $GLCind_mrna got no cDNA seq\n";
+			next GLCLOOP1;
+		}
+		$GLCcdnaseq=${$GLCcdna}{$GLCind_mrna}{'seq'};
+#		print $GLCsubinfo, "Test : mRNA: $GLCind_mrna STRAND $GLCstrnd GENE $GLCgeneID SEQUENCE\n$GLCcdnaseq\n"; ### For Test ###
+### Get 3 - frame translations
+		my $GLCcdna2aa=Frame3Translation($GLCcdnaseq);#	$GLCcdna2aa={ 0=> AA, 1 => AA, 2 => AA}
+### Get $GLCnum_top longest CDS
+		my $GLClongest_index=&GetLongestCDS($GLCcdna2aa, $GLCnum_top);
+### transfer index to coordinates
+		my $GLCnewsuffix="guess0001";
+		foreach my $GLCaaa (sort {$b<=>$a} keys %{$GLClongest_index}) {
+			foreach my $GLCbbb (sort {$a<=>$b} keys %{${$GLClongest_index}{$GLCaaa}}) {
+				my $GLCnew_mrna_id=$GLCind_mrna.".$GLCnewsuffix";
+				my $GLCstart=${$GLClongest_index}{$GLCaaa}{$GLCbbb}{'start'};
+				my $GLCend=${$GLClongest_index}{$GLCaaa}{$GLCbbb}{'end'};
+				my $GLCphase=${$GLClongest_index}{$GLCaaa}{$GLCbbb}{'phase'};
+				${$GLCreturn_gene2mrna}{$GLCgeneID}{$GLCnew_mrna_id}++;
+				${$GLCreturn_mrna}{$GLCnew_mrna_id}=dclone ${$GLCmrna}{$GLCind_mrna};
+				${$GLCreturn_exon}{$GLCnew_mrna_id}=dclone ${$GLCexon}{$GLCind_mrna};
+				if (exists ${$GLCreturn_exon}{$GLCnew_mrna_id}{'exon'}) {
+					my $GLCexonid='exon0001';
+					foreach my $GLCxxx (sort {$a<=>$b} keys %{${$GLCreturn_exon}{$GLCnew_mrna_id}{'exon'}}) {
+						foreach my $GLCyyy (sort {$a<=>$b} keys %{${$GLCreturn_exon}{$GLCnew_mrna_id}{'exon'}{$GLCxxx}}) {
+							${$GLCreturn_exon}{$GLCnew_mrna_id}{'exon'}{$GLCxxx}{$GLCyyy}=$GLCnew_mrna_id.".$GLCexonid";
+#							print $GLCsubinfo, "Test : original $GLCind_mrna NEW $GLCnew_mrna_id EXONID $GLCnew_mrna_id.$GLCexonid\n";### For Test ###
+							$GLCexonid++;
+						}
+					}
+				}
+				${$GLCreturn_cdss}{$GLCnew_mrna_id}=&GetCdsCoods(${$GLCexon}{$GLCind_mrna}, $GLCstrnd, $GLCphase, $GLCstart, $GLCend);
+				$GLCnewsuffix++;
+			}
+		}
+	}
+
+#	print $GLCsubinfo, "Test : \$GLCreturn_gene2mrna\n"; print Dumper $GLCreturn_gene2mrna; print "\n";### For Test ###
+#	print $GLCsubinfo, "Test : \$GLCreturn_mrna\n"; print Dumper $GLCreturn_mrna; print "\n";### For Test ###
+#	print $GLCsubinfo, "Test : \$GLCreturn_exon\n"; print Dumper $GLCreturn_exon; print "\n";### For Test ###
+#	print $GLCsubinfo, "Test : \$GLCreturn_cdss\n"; print Dumper $GLCreturn_cdss; print "\n";### For Test ###
+	return ($GffKit_success, $GLCreturn_gene2mrna, $GLCreturn_mrna, $GLCreturn_exon, $GLCreturn_cdss);
+}
+sub GetLongestCDS {
+	my ($GLCaa, $GLCtopnum)=@_;
+
+	my %GLChash=();
+	my $GLCindex=0;
+	my $GLCret_hash={};
+	my $GLCsubinfo="SUB(GffKit::GetLongestCDS)";
+### %GLChash=($length => $index => ('phase' => $phase,
+###                                 'start' => $start_1_based,
+###                                 'end'   => $end_1_based) 
+###           )
+#	print $GLCsubinfo, "Test: TOP $GLCtopnum \$GLCaa\n"; print Dumper $GLCaa; print "\n"; ### For test ###
+	
+	foreach my $GLCphase (keys %{$GLCaa}) {
+		my @GLCcds_arr=split(/\*/, ${$GLCaa}{$GLCphase});### stop codon is *
+#		print $GLCsubinfo, "Test: \@GLCcds_arr\n"; print Dumper \@GLCcds_arr; print "\n"; ### For test ###
+		my $GLCbaseindex=$GLCphase;
+		my $GLCcdna_len=length(${$GLCaa}{$GLCphase}) * 3 + $GLCphase;
+		for (my $GLCx=0; $GLCx<scalar(@GLCcds_arr); $GLCx++) {
+			my $GLClength1=length($GLCcds_arr[$GLCx]);
+			if ($GLCcds_arr[$GLCx]=~/^.*M.*$/) {
+				(my $GLCorf=$GLCcds_arr[$GLCx])=~s/^[^M]*//;
+				my $GLClength2=length($GLCorf);
+				my $GLCstart=$GLCbaseindex+($GLClength1-$GLClength2)*3+1;
+				my $GLCend=$GLCbaseindex+($GLClength1+1)*3;
+				$GLCend=$GLCcdna_len if ($GLCend>$GLCcdna_len);
+				$GLChash{$GLClength2}{$GLCindex}{'start'}=$GLCstart;
+				$GLChash{$GLClength2}{$GLCindex}{'end'}=$GLCend;
+				$GLChash{$GLClength2}{$GLCindex}{'phase'}=0;### start with M, so phase =0;
+			}
+			elsif ($GLCx==0) {
+###				in case ORF is at the beginning but parial
+				my $GLClength2=length(${$GLCaa}{$GLCphase});
+				my $GLCstart=$GLCbaseindex+1;
+				my $GLCend=$GLCbaseindex+($GLClength1+1)*3;
+				$GLCend=$GLCcdna_len if ($GLCend>$GLCcdna_len);
+				$GLChash{$GLClength2}{$GLCindex}{'start'}=$GLCstart-$GLCphase;
+				$GLChash{$GLClength2}{$GLCindex}{'end'}=$GLCend;
+				$GLChash{$GLClength2}{$GLCindex}{'phase'}=$GLCphase;
+			}
+			$GLCbaseindex=$GLCbaseindex+($GLClength1+1)*3;
+			$GLCindex++;
+		}
+	}
+#	print $GLCsubinfo, "Test: \%GLChash\n"; print Dumper \%GLChash; print "\n"; ### For test ###
+	my @GLCarr=sort {$b<=>$a} keys %GLChash;
+	for (my $GLCy=0; $GLCy<$GLCtopnum; $GLCy++) {
+		if (defined $GLCarr[$GLCy]) {
+			%{${$GLCret_hash}{$GLCarr[$GLCy]}}=%{$GLChash{$GLCarr[$GLCy]}};
+		}
+	}
+#	print $GLCsubinfo, "Test: \$GLCret_hash\n"; print Dumper $GLCret_hash; print "\n"; ### For test ###
+	return $GLCret_hash;
+}
+### 
+### delete 'exon' and add phase from ReadGff3 $exon{$mrna} to make $cds{$mrna}
+sub GetCdsCoods {
+	my ($GCCexon, $GCCstr, $GCCphase, $GCCstart, $GCCend)=@_;
+	
+	my $GCCret_hash={};
+	$GCCret_hash=dclone $GCCexon;
+	my $GCCsubinfo="SUB(GffKit::GetCdsCoods)";
+	my $GCCindex=0;
+	my $GCCtest_start=0;
+	my $GCCtest_end=0;
+
+	delete ${$GCCret_hash}{'exon'};
+#	print $GCCsubinfo, "Test: \$GCCexon\n"; print Dumper $GCCexon; print "\n"; ### For Test ###
+#	print $GCCsubinfo, "Test: \$GCCret_hash\n"; print Dumper $GCCret_hash; print "\n";### For Test ###
+	if ($GCCstr eq '+') {
+		my @GCCarr_left=sort {$a<=>$b} keys %{${$GCCexon}{'exon'}};
+		$GCCindex=0;
+		foreach my $GCCleft (@GCCarr_left) {
+			my $GCCcds_left=0;
+			my $GCCcds_right=0;
+			my $GCCcds_phase='.';
+			my $GCCtest_included=0;
+			my @GCCarr_right=sort {$b<=>$a} keys %{${$GCCexon}{'exon'}{$GCCleft}};
+			if (scalar(@GCCarr_right)==0) {
+				print STDERR $GCCsubinfo, "Warnings: EXON left coord $GCCleft no right\n";
+				return $GCCret_hash;
+			}
+			if (scalar(@GCCarr_right)>1) {
+				print STDERR $GCCsubinfo, "Warnings: EXON left coord $GCCleft no unique right\n";
+			}
+			my $GCCright=shift @GCCarr_right;
+			my $GCCborder1=$GCCindex+1;
+			my $GCCborder2=$GCCindex+($GCCright-$GCCleft)+1;
+			if ($GCCstart>=$GCCborder1 and $GCCstart<=$GCCborder2) {
+				$GCCcds_left=$GCCleft+($GCCstart-$GCCborder1);
+				$GCCtest_start=1;
+				$GCCtest_included=1;
+			}
+			elsif ($GCCstart<$GCCborder1 and $GCCtest_start==1 and $GCCtest_end==0) {###
+				$GCCcds_left=$GCCleft;
+				$GCCtest_included=1;
+			}
+			if ($GCCend>=$GCCborder1 and $GCCend<=$GCCborder2) {
+				$GCCcds_right=$GCCleft+($GCCend-$GCCborder1);
+				$GCCtest_end=1;
+				$GCCtest_included=1;
+			}
+			elsif ($GCCend>$GCCborder2 and $GCCtest_start==1 and $GCCtest_end==0) {###
+				$GCCcds_right=$GCCright;
+				$GCCtest_included=1;
+			}
+			if ($GCCtest_included==1) {
+				${$GCCret_hash}{'cds'}{$GCCcds_left}{$GCCcds_right}++;
+				${$GCCret_hash}{'phase'}{$GCCcds_left}{$GCCcds_right}=$GCCphase;
+				$GCCphase=3-($GCCcds_right-$GCCcds_left+1-$GCCphase)%3;
+				$GCCphase=0 if ($GCCphase==3);
+			}
+			$GCCindex=$GCCborder2;
+		}
+	}
+	elsif ($GCCstr eq '-') {
+		my @GCCarr_left=sort {$b<=>$a} keys %{${$GCCexon}{'exon'}};
+		$GCCindex=0;
+		foreach my $GCCleft (@GCCarr_left) {
+			my $GCCcds_left=0;
+			my $GCCcds_right=0;
+			my $GCCtest_included=0;
+			my $GCCcds_phase='.';
+			my @GCCarr_right=sort {$b<=>$a} keys %{${$GCCexon}{'exon'}{$GCCleft}};
+			if (scalar(@GCCarr_right)==0) {
+				print STDERR "Warnings: EXON left coord $GCCleft no right\n";
+				return $GCCret_hash;
+			}
+			if (scalar(@GCCarr_right)>1) {
+				print STDERR "Warnings: EXON left coord $GCCleft no unique right\n";
+			}
+			my $GCCright=shift @GCCarr_right;
+			my $GCCborder1=$GCCindex+1;
+			my $GCCborder2=$GCCindex+($GCCright-$GCCleft)+1;
+			if ($GCCstart>=$GCCborder1 and $GCCstart<=$GCCborder2) {
+				$GCCcds_right=$GCCright-($GCCstart-$GCCborder1);
+				$GCCtest_start=1;
+				$GCCtest_included=1;
+			}
+			elsif ($GCCstart<$GCCborder1 and $GCCtest_start==1 and $GCCtest_end==0) {
+				$GCCcds_right=$GCCright;
+				$GCCtest_included=1;
+			}
+			if ($GCCend>=$GCCborder1 and $GCCend<=$GCCborder2) {
+				$GCCcds_left=$GCCright-($GCCend-$GCCborder1);
+				$GCCtest_end=1;
+				$GCCtest_included=1;
+			}
+			elsif ($GCCend>$GCCborder2 and $GCCtest_start==1 and $GCCtest_end==0) {
+				$GCCcds_left=$GCCleft;
+				$GCCtest_included=1;
+			}
+			if ($GCCtest_included==1) {
+				${$GCCret_hash}{'phase'}{$GCCcds_left}{$GCCcds_right}=$GCCphase;
+				${$GCCret_hash}{'cds'}{$GCCcds_left}{$GCCcds_right}++;
+				$GCCphase=3-($GCCcds_right-$GCCcds_left+1-$GCCphase)%3;
+				$GCCphase=0 if ($GCCphase==3);
+			}
+			$GCCindex=$GCCborder2;
+		}
+	}
+	if ($GCCtest_start==1 and $GCCtest_end==1) {
+#		print $GCCsubinfo, "Test: \$GCCret_hash\n"; print Dumper $GCCret_hash; print "\n"; ### For Test ###
+		return $GCCret_hash;
+	}
+	elsif ($GCCtest_end==1) {
+		print STDERR "Warnings: no proper start codon\n";
+		$GCCret_hash={};return $GCCret_hash;
+	}
+	elsif ($GCCtest_start==1) {
+		print STDERR "Warnings: no proper stop codon\n";
+		$GCCret_hash={};return $GCCret_hash;
+	}
+}
+###       )
+### %cds=($mrnaid => ('reference' => $arr[0],
+###                   'cds'       => ({$arr[3]} => ($arr[4] => num++)),
+###                   'strand'    => $arr[6],
+###                   'score'     => $arr[5],
+###                   'phase'     => ({$arr[3]} => ($arr[4] => $arr[7]))
+###                   )
+###       )
+
+
+
+
 
 #my $GRSsubinfo='SUB(GffKit::GffReverseStrand)';
 #my $GffKit_success=1; $GffKit_failure=0; $GffKit_debug=0;
