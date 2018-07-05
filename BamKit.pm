@@ -6,7 +6,7 @@ FuhaoPerl5Lib::BamKit
 
 =head1 SYNOPSIS
 
-use samtools to index, extract, merge, rehead BAM files
+  use samtools to index, extract, merge, rehead BAM files
 
 =head1 Requirements
 
@@ -162,7 +162,7 @@ use FuhaoPerl5Lib::FileKit;
 use FuhaoPerl5Lib::MiscKit qw(IsReference);
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 
-$VERSION     = '20170224';
+$VERSION     = '20180705';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift);
