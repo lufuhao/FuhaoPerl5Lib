@@ -105,7 +105,7 @@ use Bio::DB::Fasta;
 use Data::Dumper qw/Dumper/;
 use Storable qw/dclone/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20180629';
+$VERSION     = '20180704';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer GuessLongestCDS);
