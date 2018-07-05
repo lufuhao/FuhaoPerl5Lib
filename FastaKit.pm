@@ -272,7 +272,7 @@ use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
 use Bio::SeqIO;
 use Bio::DB::Fasta;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20180629';
+$VERSION     = '20180704';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq);
@@ -2932,7 +2932,8 @@ sub GetCdnaSeq {
 	my $GCSind_score='.';
 	my $GCSind_ref='';
 	my $GCScdna_seq='';
-
+	
+#	print $GCSsubinfo, "Test: \$GCSexon\n"; print Dumper $GCSexon; print "\n"; ### For test ###
 	unless (defined $GCSfasta and -s $GCSfasta) {
 		print STDERR $GCSsubinfo, "Error: invalid fasta file\n";
 		return $FastaKit_failure;
@@ -2943,6 +2944,7 @@ sub GetCdnaSeq {
 		$GCSind_strand='';
 		$GCSind_score='.';
 		$GCSind_ref='';
+#		print $GCSsubinfo, "Test: mRNA_ID: $GCSmra_id\n";### For test ###
 		unless (exists ${$GCSexon}{$GCSmra_id} and exists ${$GCSexon}{$GCSmra_id}{'reference'} and ${$GCSexon}{$GCSmra_id}{'reference'}=~/^\S+$/) {
 			print STDERR $GCSsubinfo, "Warnings: no reference seq: mRNA_ID $GCSmra_id\n";
 			next GCSLOOP1;
@@ -2963,22 +2965,24 @@ sub GetCdnaSeq {
 		my $GCStest1=0;
 		my $GCScdna_exp_len=0;
 		foreach my $GCSstart (sort {$a<=>$b} keys %{${$GCSexon}{$GCSmra_id}{'exon'}}) {
+#			print $GCSsubinfo, "Test: EXON start $GCSstart\n";### For test ###
 			my @GCStemparr=();
 			@GCStemparr=keys %{${$GCSexon}{$GCSmra_id}{'exon'}{$GCSstart}};
 			unless (scalar(@GCStemparr)==1 and defined $GCStemparr[0] and $GCStemparr[0]=~/^\d+$/) {
 				print STDERR $GCSsubinfo, "Warnings: invalid exon right: mRNA_ID $GCSmra_id EXON LEFT $GCSstart\n";
 				$GCStest1=1;last;
 			}
-			my $end=$GCStemparr[0];
-			$GCSind_exon_seq=$GCSseqdb->seq($GCSind_ref, $GCSstart, $end);
-			unless (length($GCSind_exon_seq) == ($end-$GCSstart+1)) {
-				print STDERR $GCSsubinfo, "Warnings: invalid exon seq length: mRNA_ID $GCSmra_id EXON LEFT $GCSstart RIGHT $end SEQUENCE $GCSind_exon_seq\n";
+			my $GCSend=$GCStemparr[0];
+#			print $GCSsubinfo, "Test: EXON start $GCSstart end $GCSend\n";### For test ###
+			$GCSind_exon_seq=$GCSseqdb->seq($GCSind_ref, $GCSstart, $GCSend);
+			unless (length($GCSind_exon_seq) == ($GCSend-$GCSstart+1)) {
+				print STDERR $GCSsubinfo, "Warnings: invalid exon seq length: mRNA_ID $GCSmra_id EXON LEFT $GCSstart RIGHT $GCSend SEQUENCE $GCSind_exon_seq\n";
 				$GCStest1=1;last;
 			}
 			$GCScdna_seq.=$GCSind_exon_seq;
-			$GCScdna_exp_len=$GCScdna_exp_len+$end-$GCSstart+1;
+			$GCScdna_exp_len=$GCScdna_exp_len+$GCSend-$GCSstart+1;
 		}
-		
+#		print $GCSsubinfo, "Test: mRNA seqID $GCSmra_id EXPECTED_cDNA_Length $GCScdna_exp_len cDNA_Seq\n$GCScdna_seq\n";### For test ###
 		if ($GCScdna_seq eq '' or length($GCScdna_seq)==0) {
 			print STDERR $GCSsubinfo, "Warnings: no cDNA seq: mRNA_ID $GCSmra_id\n";
 			next GCSLOOP1;
@@ -2988,14 +2992,17 @@ sub GetCdnaSeq {
 			next GCSLOOP1;
 		}
 		if ($GCStest1==0) {
-			$GCScdna_seq=&SeqRevComp($GCScdna_seq) if ($GCSind_strand eq '-');
+			if ($GCSind_strand eq '-') {
+				$GCScdna_seq=&SeqRevComp($GCScdna_seq);
+			}
 			${$GCScdnaseq}{$GCSmra_id}{'reference'}=$GCSind_ref;
 			${$GCScdnaseq}{$GCSmra_id}{'strand'}=$GCSind_strand;
 			${$GCScdnaseq}{$GCSmra_id}{'score'}=$GCSind_score;
-			${$GCScdnaseq}{$GCSmra_id}{'seq'}=$GCSind_score;
+			${$GCScdnaseq}{$GCSmra_id}{'seq'}=$GCScdna_seq;
 			${$GCScdnaseq}{$GCSmra_id}{'exon'}=${$GCSexon}{$GCSmra_id}{'exon'};
 		}
 	}
+#	print $GCSsubinfo, "Test: \$GCScdnaseq\n"; print Dumper $GCScdnaseq; print "\n"; ### For test ###
 	
 	return ($FastaKit_success, $GCScdnaseq);
 }
