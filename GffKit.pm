@@ -64,6 +64,7 @@ Perl Modules:
                          'strand'    => $arr[6],
                          'score'     => $arr[5],
                          'Note'      => $note ###Not necessarily exist
+                         'Ontology_term'  => GO:xxxx,GO:xxx,EC:yyy
                         )
             )
     * %mrnas=($geneid => ('reference' => $arr[0],
@@ -72,7 +73,7 @@ Perl Modules:
                           'strand'    => $arr[6],
                           'score'     => $arr[5],
                           'Note'      => $note ###Not necessarily exist
-                          'parent'    => $geneID
+                          'Parent'    => $geneID
                          )
              )
     * %exon=($mrnaid => ('reference' => $arr[0],
@@ -297,6 +298,7 @@ sub GffReverseStrand {
 ###                    'strand'    => $arr[6],
 ###                    'score'     => $arr[5],
 ###                    'Note'      => $note ###Not necessarily exist
+###                    'Ontology_term'  => GO:xxxx,GO:xxx,EC:yyy
 ###                   )
 ###       )
 ### %mrnas=($geneid => ('reference' => $arr[0],
@@ -305,7 +307,7 @@ sub GffReverseStrand {
 ###                     'strand'    => $arr[6],
 ###                     'score'     => $arr[5],
 ###                     'Note'      => $note ###Not necessarily exist
-###                     'parent'    => $geneID
+###                     'Parent'    => $geneID
 ###                    )
 ###       )
 ### %exon=($mrnaid => ('reference' => $arr[0],
@@ -381,9 +383,13 @@ sub ReadGff3 {
 			print STDERR $RGsubinfo, "Warnings: unknown strand at line($.): ".$RGline."\n" ;
 			next;
 		}
+		my $feature_hash=&SplitGff3Feature($RGarr[8]);
+		unless (exists ${$feature_hash}{'ID'}) {
+			print STDERR $RGsubinfo, "Error: no ID in col9 at line($.): ".$RGline."\n" ;
+			return  $GffKit_failure;
+		}
 		if ($RGarr[2] =~ /^gene$/i) {
-			my $RGthisgeneid=$RGarr[8];
-			$RGthisgeneid=~s/^.*ID=//;$RGthisgeneid=~s/;.*$//;
+			my $RGthisgeneid=${$feature_hash}{'ID'};
 			if (exists ${$RGgene}{$RGthisgeneid}) {
 				print STDERR $RGsubinfo, "Error: duplicated gene ID: $RGthisgeneid\n";
 				return  $GffKit_failure;
@@ -394,20 +400,19 @@ sub ReadGff3 {
 			${$RGgene}{$RGthisgeneid}{'end'}=$RGarr[4];
 			${$RGgene}{$RGthisgeneid}{'strand'}=$RGarr[6];
 			${$RGgene}{$RGthisgeneid}{'score'}=$RGarr[5];
-			if ($RGarr[8]=~/Note=(\S+)/) {
-				my $RGnotes=$1;
-				$RGnotes=~s/;.*$//;
-				$RGnotes=~s/\s+$//;
-				$RGnotes=~s/^\s+//;
-				${$RGgene}{$RGthisgeneid}{'note'}=$RGnotes;
+			foreach my $RGx (keys %{$feature_hash}) {
+				next if ($RGx eq 'ID');
+				${$RGgene}{$RGthisgeneid}{$RGx}=${$feature_hash}{$RGx};
 			}
-#			print $RGsubinfo, "Test: geneid: ",$RGthisgeneid , "\tgenenote: ",${$RGgene}{$RGthisgeneid}{'note'},  "\n" if ($GffKit_debug); ### For test ###
+#			print $RGsubinfo, "Test: geneid: ",$RGthisgeneid , "\tgenenote: ",${$RGgene}{$RGthisgeneid}{'Note'},  "\n" if ($GffKit_debug); ### For test ###
 		}
 		elsif ($RGarr[2] =~ /^mRNA$/i) {
-			my $RGthismrnaid=$RGarr[8];
-			$RGthismrnaid=~s/^.*ID=//; $RGthismrnaid=~s/;.*$//;
-			my $RGparent=$RGarr[8];
-			$RGparent=~s/^.*Parent=//; $RGparent=~s/;.*$//;
+			my $RGthismrnaid=${$feature_hash}{'ID'};
+			unless (exists ${$feature_hash}{'Parent'}) {
+				print STDERR $RGsubinfo, "Error: no ID in col9 at line($.): ".$RGline."\n" ;
+				return  $GffKit_failure;
+			}
+			my $RGparent=${$feature_hash}{'Parent'};
 			if (exists ${$RGmrnas}{$RGthismrnaid}) {
 				print STDERR $RGsubinfo, "Error: duplicated mRNA ID: $RGthismrnaid\n";
 				return  $GffKit_failure;
@@ -417,15 +422,11 @@ sub ReadGff3 {
 			${$RGmrnas}{$RGthismrnaid}{'strand'}=$RGarr[6];
 			${$RGmrnas}{$RGthismrnaid}{'score'}=$RGarr[5];
 			${$RGmrnas}{$RGthismrnaid}{'reference'}=$RGarr[0];
-			${$RGmrnas}{$RGthismrnaid}{'parent'}=$RGparent;
 			${$RGgene2mrna}{$RGparent}{$RGthismrnaid}++;
 			$RGmrna2gene{$RGthismrnaid}{$RGparent}++;
-			if ($RGarr[8]=~/Note=(\S+)/) {
-				my $RGnotes=$1;
-				$RGnotes=~s/;.*$//;
-				$RGnotes=~s/\s+$//;
-				$RGnotes=~s/^\s+//;
-				${$RGmrnas}{$RGthismrnaid}{'note'}=$RGnotes;
+			foreach my $RGx (keys %{$feature_hash}) {
+				next if ($RGx eq 'ID');
+				${$RGmrnas}{$RGthismrnaid}{$RGx}=${$feature_hash}{$RGx};
 			}
 		}
 		elsif ($RGarr[2] =~ /^exon$/i) {
@@ -1196,12 +1197,27 @@ sub GetPartialPhase {
 	
 	return $GffKit_success;
 }
+### split GFF3 Col9
+sub SplitGff3Feature {
+	my $SGFfeature=shift;
+	
+	my $SGFret_hash={};
+	
+	chomp $SGFfeature; ### double check line ending
+	my @SGFarr1=split(/;/,$SGFfeature);
+	foreach my $SGFx (@SGFarr1) {
+		if ($SGFx=~/^([^=]+)=(.+)$/) {
+			${$SGFret_hash}{$1}=$2;
+		}
+	}
+	return $SGFret_hash;
+}
 
 
 
 
 ### Write GFF3 output
-### WriteGff3($EGoutgff3, $WGref2gene, $WGgene2mrna, $WGgene, $WGmrna, $WGexon, $WGcds)
+### WriteGff3($outgff3, $ref2gene, $gene2mrna, $gene, $mrna, $exon, $cds)
 ###
 ### %referenceids  => ( $reference_id => $gene_start_pos => $gene_id => num++)
 ### %gene2mrna     => ( $gene_id => $mrna_id => num++ )
@@ -1210,7 +1226,7 @@ sub GetPartialPhase {
 ###                    'end'       => $arr[4],
 ###                    'strand'    => $arr[6],
 ###                    'score'     => $arr[5],
-###                    'note'      => $note ###Not necessarily exist
+###                    'Note'      => $note ###Not necessarily exist
 ###                       )
 ###       )
 ### %mrnas=($mrnaid => ('reference' => $arr[0],
@@ -1218,7 +1234,7 @@ sub GetPartialPhase {
 ###                    'end'       => $arr[4],
 ###                    'strand'    => $arr[6],
 ###                    'score'     => $arr[5],
-###                    'note'      => $note ###Not necessarily exist
+###                    'Note'      => $note ###Not necessarily exist
 ###       )
 ### %exons=($mrnaid => ('reference' => $arr[0],
 ###                    'exon' => ({$arr[3]} => ($arr[4] => $exonid)),
@@ -1236,14 +1252,14 @@ sub GetPartialPhase {
 
 ### Return: 1=success, 0=failed
 sub WriteGff3 {
-	my ($EGoutgff3, $WGref2gene, $WGgene2mrna, $WGgene, $WGmrna, $WGexon, $WGcds) =@_;
+	my ($WGoutgff3, $WGref2gene, $WGgene2mrna, $WGgene, $WGmrna, $WGexon, $WGcds) =@_;
 	
 	my $WGsubinfo='SUB(GffKit::WriteGff3)';
 	local *WGGFF3OUT;
 	
 	close WGGFF3OUT if (defined fileno(WGGFF3OUT));
-	unless (open (WGGFF3OUT, " > $EGoutgff3 ")) {
-		print STDERR $WGsubinfo, "Error: can not write GFF3 out: $EGoutgff3\n";
+	unless (open (WGGFF3OUT, " > $WGoutgff3 ")) {
+		print STDERR $WGsubinfo, "Error: can not write GFF3 out: $WGoutgff3\n";
 		return $GffKit_failure;
 	}
 	print WGGFF3OUT '##gff-version 3', "\n";
@@ -1278,17 +1294,14 @@ sub WriteGff3 {
 						${$WGgene}{$WGgeneid}{'score'}='.';
 				}
 				my @WGarr=();
-				@WGarr=($WGref, '.', 'gene', ${$WGgene}{$WGgeneid}{'start'}, ${$WGgene}{$WGgeneid}{'end'}, ${$WGgene}{$WGgeneid}{'score'}, ${$WGgene}{$WGgeneid}{'strand'}, '.', "ID=$WGgeneid;Name=$WGgeneid");
-				foreach my $WGkey (keys %{${$WGgene}{$WGgeneid}}) {
+				@WGarr=($WGref, '.', 'gene', ${$WGgene}{$WGgeneid}{'start'}, ${$WGgene}{$WGgeneid}{'end'}, ${$WGgene}{$WGgeneid}{'score'}, ${$WGgene}{$WGgeneid}{'strand'}, '.', "ID=$WGgeneid");
+				foreach my $WGkey (sort keys %{${$WGgene}{$WGgeneid}}) {
 #seqid	source	type	start	end	score	strand	phase	attributes
 ##gff-version 3
 #ctg123 . mRNA            1300  9000  .  +  .  ID=mrna0001;Name=sonichedgehog
 					next if ($WGkey =~/^(reference)|(start)|(end)|(strand)|(score)$/);
 					if ($WGkey eq 'score' and ${$WGgene}{$WGgeneid}{'score'} =~/^\d+\.*\d*$/) {
 						$WGarr[5]=${$WGgene}{$WGgeneid}{'score'};
-					}
-					elsif ($WGkey eq 'note' and ${$WGgene}{$WGgeneid}{'note'} =~/^\S+/) {
-						$WGarr[8]=$WGarr[8].';Note='.${$WGgene}{$WGgeneid}{'note'};
 					}
 					else {
 						$WGarr[8]=$WGarr[8].';'.$WGkey.'='.${$WGgene}{$WGgeneid}{$WGkey};
@@ -1336,14 +1349,14 @@ sub WriteGff3 {
 						}
 						
 						@WGarr=();
-						@WGarr=($WGref, '.', 'mRNA', ${$WGmrna}{$WGmrnaid}{'start'}, ${$WGmrna}{$WGmrnaid}{'end'}, ${$WGmrna}{$WGmrnaid}{'score'}, ${$WGmrna}{$WGmrnaid}{'strand'}, '.', "ID=$WGmrnaid;Parent=$WGgeneid");
-						foreach my $WGkey2 (keys %{${$WGmrna}{$WGmrnaid}}) {
+						@WGarr=($WGref, '.', 'mRNA', ${$WGmrna}{$WGmrnaid}{'start'}, ${$WGmrna}{$WGmrnaid}{'end'}, ${$WGmrna}{$WGmrnaid}{'score'}, ${$WGmrna}{$WGmrnaid}{'strand'}, '.', "ID=$WGmrnaid");
+						foreach my $WGkey2 ( sort keys %{${$WGmrna}{$WGmrnaid}}) {
 							next if ($WGkey2 =~/^(reference)|(start)|(end)|(strand)|(score)$/);
 #							print $WGsubinfo, "Test: gene $WGgeneid \${\$WGgene}{\$WGgeneid}\n"; print Dumper ${$WGgene}{$WGgeneid}; ### For test ###
 							if (($WGkey2 eq 'score') and ${$WGmrna}{$WGmrnaid}{$WGkey2} =~/^\d+\.*\d*$/) {
 								$WGarr[5]=${$WGmrna}{$WGmrnaid}{$WGkey2};
 							}
-							elsif (($WGkey2 eq 'note') and ${$WGmrna}{$WGmrnaid}{$WGkey2} =~/^\S+$/) {
+							elsif (($WGkey2 eq 'Note') and ${$WGmrna}{$WGmrnaid}{$WGkey2} =~/^\S+$/) {
 								$WGarr[8]=$WGarr[8].';Note='.${$WGmrna}{$WGmrnaid}{$WGkey2};
 							}
 							else {
@@ -1428,7 +1441,7 @@ sub WriteGff3 {
 							if (exists ${$WGcds}{$WGmrnaid}{'cds'} and 
 								(scalar(keys %{${$WGcds}{$WGmrnaid}{'cds'}})>0)
 							){
-								foreach my $WGx (sort {$a<=> $b} keys %{${$WGcds}{$WGmrnaid}{'cds'}}) {
+								foreach my $WGx (sort {$a<=>$b} keys %{${$WGcds}{$WGmrnaid}{'cds'}}) {
 									foreach my $WGy (sort {$a<=> $b} keys %{${$WGcds}{$WGmrnaid}{'cds'}{$WGx}}) {
 										unless ($WGy=~/^\d+$/ and $WGx=~/^\d+$/ and $WGy>=$WGx) {
 											print STDERR $WGsubinfo, "Error: CDS end > start: $WGx-$WGy for mRNA $WGmrnaid\n";
@@ -2366,11 +2379,11 @@ sub GuessLongestCDS {
 		}
 		$GLCstrnd=${$GLCmrna}{$GLCind_mrna}{'strand'};
 #		print $GLCsubinfo, "Test : mRNA: $GLCind_mrna STRAND $GLCstrnd\n"; ### For Test ###
-		unless (exists ${$GLCmrna}{$GLCind_mrna}{'parent'} and ${$GLCmrna}{$GLCind_mrna}{'parent'}=~/^\S+$/) {
+		unless (exists ${$GLCmrna}{$GLCind_mrna}{'Parent'} and ${$GLCmrna}{$GLCind_mrna}{'Parent'}=~/^\S+$/) {
 			print STDERR $GLCsubinfo, "Error: mRNA $GLCind_mrna got no parent\n";
 			next GLCLOOP1;
 		}
-		$GLCgeneID=${$GLCmrna}{$GLCind_mrna}{'parent'};
+		$GLCgeneID=${$GLCmrna}{$GLCind_mrna}{'Parent'};
 #		print $GLCsubinfo, "Test : mRNA: $GLCind_mrna STRAND $GLCstrnd GENE $GLCgeneID\n"; ### For Test ###
 		unless (exists ${$GLCcdna}{$GLCind_mrna}{'seq'} and ${$GLCcdna}{$GLCind_mrna}{'seq'}=~/^\S+$/) {
 			print STDERR $GLCsubinfo, "Error: mRNA $GLCind_mrna got no cDNA seq\n";
