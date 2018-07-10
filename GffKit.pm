@@ -52,11 +52,42 @@ Perl Modules:
     *     GLCnum_top is the top INT, how many top longest you want
     * Return: (1/0, $gene2mrna, $mrna, $exon, $cdss);
 
-=item WriteGff3 ($EGoutgff3, $WGref2gene, $WGgene2mrna, $WGgene, $WGmrna, $WGexon, $WGcds)
+=item ReadGff3($gffin, $fasta)
 
-    * Write ReadGff3 object to GFF3 file
-    * Return: 1=Sucesss    0=Failure
-
+    * Read GFF3 into hash
+    * ($success, $referenceids, $gene, $gene2mrna, $mrnas, $exons, $cds)=ReadGff3($gffin, $fasta)
+    * %referenceids  => ( $reference_id => $gene_start_pos => $gene_id => num++)
+    * %gene2mrna     => ( $gene_id => $mrna_id => num++ )
+    * %gene=($geneid => ('reference' => $arr[0],
+                         'start'     => $arr[3], 
+                         'end'       => $arr[4],
+                         'strand'    => $arr[6],
+                         'score'     => $arr[5],
+                         'Note'      => $note ###Not necessarily exist
+                        )
+            )
+    * %mrnas=($geneid => ('reference' => $arr[0],
+                          'start'     => $arr[3], 
+                          'end'       => $arr[4],
+                          'strand'    => $arr[6],
+                          'score'     => $arr[5],
+                          'Note'      => $note ###Not necessarily exist
+                          'parent'    => $geneID
+                         )
+             )
+    * %exon=($mrnaid => ('reference' => $arr[0],
+                         'exon'      => ({$arr[3]} => ($arr[4] => $exonid)),
+                         'strand'    => $arr[6],
+                         'score'     => $arr[5]
+                        )
+            )
+    * %cds=($mrnaid => ('reference' => $arr[0],
+                        'cds'       => ({$arr[3]} => ($arr[4] => num++)),
+                        'strand'    => $arr[6],
+                        'score'     => $arr[5],
+                        'phase'     => ({$arr[3]} => ($arr[4] => $arr[7]))
+                       )
+           )
 
 =item SortGeneOrder($gff3_genelist_in, $order_in, $gene_order_out)
 
@@ -68,6 +99,12 @@ Perl Modules:
     * gff3.genelist [tab-delimited]
           grep -E "\tgene\t" xxx.gff3 > gff3.genelist
     * Return: 1=Sucesss    0=Failure
+
+=item WriteGff3 ($outgff3, $referenceids, $gene2mrna, $gene, $mrna, $exon, $cds)
+
+    * Write ReadGff3 object to GFF3 file
+    * Return: 1=Sucesss    0=Failure
+
 
 =back
 
@@ -105,7 +142,7 @@ use Bio::DB::Fasta;
 use Data::Dumper qw/Dumper/;
 use Storable qw/dclone/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20180704';
+$VERSION     = '20180709';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer GuessLongestCDS);
@@ -250,7 +287,7 @@ sub GffReverseStrand {
 
 
 ### Read GFF3 into hash
-### ($GffKit_success, $RGreferenceids, $RGgene, $RGgene2mrna, $RGmrnas, $RGexons, $RGcds)=ReadGff3($RGgffin, $RGfasta)
+### ($success, $referenceids, $gene, $gene2mrna, $mrnas, $exons, $cds)=ReadGff3($RGgffin, $RGfasta)
 ###
 ### %referenceids  => ( $reference_id => $gene_start_pos => $gene_id => num++)
 ### %gene2mrna     => ( $gene_id => $mrna_id => num++ )
