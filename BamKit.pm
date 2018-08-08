@@ -69,6 +69,18 @@ Perl Modules:
     * Note: need to double times for paired end, so k2 means unique for paired reads
     * Return: 1=Success    0=Failure
 
+=item BamRestoreSplit($bamin, $bed, $bamout, [$path_samtools])
+
+    * Restore BAM coordintes due to splited reference
+    * Return: 1=Success    0= Failure
+    * BED file 6 columns: 
+        chr1A_part1     0       471304005       chr1A   0       471304005
+        chr1A_part2     0       122798051       chr1A   471304005       594102056
+        chr1B_part1     0       438720154       chr1B   0       438720154
+        chr1B_part2     0       251131716       chr1B   438720154       689851870
+        chr1D_part1     0       452179604       chr1D   0       452179604
+        chr1D_part2     0       43273582        chr1D   452179604       495453186
+
 =item CalCigarRefLength (CIGAR)
 
     * Calculate reference length based cigar
@@ -165,9 +177,9 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20180705';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift);
-%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift)],
-                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift)]);
+@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit);
+%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit)],
+                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit)]);
 
 
 
@@ -2115,6 +2127,151 @@ sub BamAtacShift {
 
 	return $BamKit_success;
 }
+
+
+
+### Restore BAM coordintes due to splited reference
+### BamRestoreSplit($BRSbamin, $BRSbed, $BRSbamout)
+### Global: $BamKit_success; $BamKit_failure;
+### Dependency:
+### Note:
+### Return: 1=Success    0= Failure
+### chr1A_part1     0       471304005       chr1A   0       471304005
+### chr1A_part2     0       122798051       chr1A   471304005       594102056
+### chr1B_part1     0       438720154       chr1B   0       438720154
+### chr1B_part2     0       251131716       chr1B   438720154       689851870
+### chr1D_part1     0       452179604       chr1D   0       452179604
+### chr1D_part2     0       43273582        chr1D   452179604       495453186
+sub BamRestoreSplit {
+	my ($BRSbamin, $BRSbed, $BRSbamout, $BRSpath_samtools)=@_;
+	
+	my $BRSsubinfo="SUB(BamKit::BamRestoreSplit)";
+	my %BRShash=();
+	my %BRSfulllength=();
+	my $BRSnumline=0;
+	my %BRSlength_print=();
+	$BRSpath_samtools='samtools' unless (defined $BRSpath_samtools);
+	local *BRSBAMINPUT;
+	local *BRSBEDCOORDS;
+	local *BRSBAMOUT;
+	
+	close BRSBEDCOORDS if (defined fileno(BRSBEDCOORDS));
+	if ($BRSbed=~/\.bed\.gz$/i) {
+		unless (open BRSBEDCOORDS, "zcat $BRSbed | ") {
+			print STDERR $BRSsubinfo, "Error: can not open gzipped BED coordinates\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BRSbed=~/\.bed$/i) {
+		unless (open BRSBEDCOORDS, '<', $BRSbed) {
+			print STDERR $BRSsubinfo, "Error: can not open flat BED coordinates\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BRSsubinfo, "Error: BED file should have a suffix of .bed or .bed.gz\n";
+		return $BamKit_failure;
+	}
+	while (my $BRAline=<BRSBEDCOORDS>) {
+		$BRSnumline++;
+		next if ($BRAline=~/^#/);
+		chomp $BRAline;
+		my @BRSarr=split(/\t/, $BRSnumline);
+		unless (scalar(@BRSarr)>=6) {
+			print STDERR $BRSsubinfo, "Warnings: invalid BED line ($BRSnumline): ncol<6\n$BRAline\n";
+			next;
+		}
+		unless (exists $BRShash{$BRSarr[0]}) {
+			print STDERR $BRSsubinfo, "Error: repeated ID (col1 at line$BRSnumline) in BED file: $BRSarr[0]\n";
+			return $BamKit_failure;
+		}
+		$BRShash{$BRSarr[0]}{'ref'}=$BRSarr[3];
+		$BRShash{$BRSarr[0]}{'start'}=$BRSarr[4];
+		unless (exists $BRSfulllength{$BRSarr[3]} and $BRShash{$BRSarr[3]}<=$BRSarr[5]) {
+			$BRShash{$BRSarr[3]}=$BRSarr[5];### seq_full_length
+		}
+	}
+	close BRSBEDCOORDS;
+	
+	close BRSBAMINPUT if (defined fileno(BRSBAMINPUT));
+	if ($BRSbamin=~/\.bam$/i) {
+		unless (open BRSBAMINPUT, "$BRSpath_samtools view -h $BRSbamin | ") {
+			print STDERR $BRSsubinfo, "Error: can not open BAM input\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BRSbamin=~/\.sam$/i) {
+		unless (open BRSBAMINPUT, "$BRSpath_samtools view -h -S $BRSbamin | ") {
+			print STDERR $BRSsubinfo, "Error: can not open SAM input\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BRSsubinfo, "Error: BAM input should have a suffix of .bam or .sam\n";
+		return $BamKit_failure;
+	}
+	close BRSBAMOUT if (defined fileno(BRSBAMOUT));
+	if ($BRSbamout=~/\.bam$/i) {
+		unless (open BRSBAMOUT, " | $BRSpath_samtools view -h -S -b - > $BRSbamout") {
+			print STDERR $BRSsubinfo, "Error: can not write BAM input\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($BRSbamout=~/\.sam$/i) {
+		unless (open BRSBAMOUT, " | $BRSpath_samtools view -h -S - > $BRSbamout") {
+			print STDERR $BRSsubinfo, "Error: can not write SAM input\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $BRSsubinfo, "Error: BAM output should have a suffix of .bam or .sam\n";
+		return $BamKit_failure;
+	}
+	while (my $BRSline=<BRSBAMINPUT>) {
+		if ($BRSline=~/^\@/) {
+			if ($BRSline=~/^\@SQ/) {
+				my $BRSrefname=~s/^\@SQ\tSN://;$BRSrefname=~s/\tLN:.*$//;
+				unless (exists $BRShash{$BRSrefname} and exists $BRShash{$BRSrefname}{'ref'}) {
+					print STDERR "Warnings: no conversion for seqID $BRSrefname\n";
+					print BRSBAMOUT $BRSline, "\n";
+					next;
+				}
+				my $BRSnewref=$BRShash{$BRSrefname}{'ref'};
+				unless (exists $BRSfulllength{$BRSnewref}) {
+					print STDERR "Warnings: conversion for seqID $BRSrefname got no full-length\n";
+					return $BamKit_failure;
+				}
+				unless (exists $BRSlength_print{$BRSnewref}) {
+					$BRSline="\@SQ\tSN:".$BRSnewref."\tLN:".$BRSfulllength{$BRSnewref};
+				}
+				$BRSlength_print{$BRSnewref}++;
+			}
+		}
+		else {
+			my @BRSarr2=split(/\t/,$BRSline);
+			my $BRSprev_ref1=$BRSarr2[2];
+			if (exists $BRShash{$BRSprev_ref1} and defined $BRSarr2[3] and $BRSarr2[3]=~/^\d+$/ and $BRSarr2[3]>0) {
+				$BRSarr2[2]=$BRShash{$BRSprev_ref1}{'ref'};
+				$BRSarr2[3]+=$BRShash{$BRSprev_ref1}{'start'};
+			}
+			my $BRSprev_ref2=$BRSarr2[6];
+			if (exists $BRShash{$BRSprev_ref2} and defined $BRSarr2[7] and $BRSarr2[7]=~/^\d+$/ and $BRSarr2[7]>0) {
+				$BRSarr2[6]=$BRShash{$BRSprev_ref2}{'ref'};
+				$BRSarr2[7]+=$BRShash{$BRSprev_ref2}{'start'};
+			}
+			$BRSline=join("\t", @BRSarr2);
+		}
+		print BRSBAMOUT $BRSline, "\n";
+	}
+	close BRSBAMINPUT;
+	close BRSBAMOUT;
+	
+	return $BamKit_success;
+}
+
+
+
+
 
 
 ### 
