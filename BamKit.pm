@@ -172,6 +172,7 @@ use FuhaoPerl5Lib::CmdKit qw(exec_cmd_return);
 use Bio::DB::Sam;
 use FuhaoPerl5Lib::FileKit;
 use FuhaoPerl5Lib::MiscKit qw(IsReference);
+use Data::Dumper qw /Dumper/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 
 $VERSION     = '20180809';
@@ -2181,26 +2182,31 @@ sub BamRestoreSplit {
 		print STDERR $BRSsubinfo, "Error: BED file should have a suffix of .bed or .bed.gz\n";
 		return $BamKit_failure;
 	}
-	while (my $BRAline=<BRSBEDCOORDS>) {
+	while (my $BRSline=<BRSBEDCOORDS>) {
 		$BRSnumline++;
-		next if ($BRAline=~/^#/);
-		chomp $BRAline;
-		my @BRSarr=split(/\t/, $BRSnumline);
+		next if ($BRSline=~/^#/);
+		chomp $BRSline;
+		my @BRSarr=split(/\t/, $BRSline);
 		unless (scalar(@BRSarr)>=6) {
-			print STDERR $BRSsubinfo, "Warnings: invalid BED line ($BRSnumline): ncol<6\n$BRAline\n";
+			print STDERR $BRSsubinfo, "Warnings: invalid BED line ($BRSnumline): ncol<6\n$BRSline\n";
 			next;
 		}
-		unless (exists $BRShash{$BRSarr[0]}) {
+		if (exists $BRShash{$BRSarr[0]}) {
 			print STDERR $BRSsubinfo, "Error: repeated ID (col1 at line$BRSnumline) in BED file: $BRSarr[0]\n";
 			return $BamKit_failure;
 		}
 		$BRShash{$BRSarr[0]}{'ref'}=$BRSarr[3];
 		$BRShash{$BRSarr[0]}{'start'}=$BRSarr[4];
-		unless (exists $BRSfulllength{$BRSarr[3]} and $BRShash{$BRSarr[3]}<=$BRSarr[5]) {
-			$BRShash{$BRSarr[3]}=$BRSarr[5];### seq_full_length
+		unless (exists $BRSfulllength{$BRSarr[3]} and $BRSfulllength{$BRSarr[3]}<=$BRSarr[5]) {
+			$BRSfulllength{$BRSarr[3]}=$BRSarr[5];### seq_full_length
 		}
 	}
 	close BRSBEDCOORDS;
+	
+	print $BRSsubinfo, "Info: Read lines: $BRSnumline\n";
+	print $BRSsubinfo, "Info: Read parts: ". scalar(keys %BRShash) ."\n";
+#	print $BRSsubinfo, "Test: \%BRShash\n"; print Dumper \%BRShash; print "\n";### For test ###
+#	print $BRSsubinfo, "Test: \%BRSfulllength\n"; print Dumper \%BRSfulllength; print "\n";### For test ###
 	
 	close BRSBAMINPUT if (defined fileno(BRSBAMINPUT));
 	if ($BRSbamin=~/\.bam$/i) {
@@ -2237,11 +2243,14 @@ sub BamRestoreSplit {
 		return $BamKit_failure;
 	}
 	while (my $BRSline=<BRSBAMINPUT>) {
+		chomp $BRSline;
 		if ($BRSline=~/^\@/) {
 			if ($BRSline=~/^\@SQ/) {
-				my $BRSrefname=~s/^\@SQ\tSN://;$BRSrefname=~s/\tLN:.*$//;
+				my $BRSrefname=$BRSline;
+				$BRSrefname=~s/^\@SQ\tSN://;$BRSrefname=~s/\s+LN:.*$//;
 				unless (exists $BRShash{$BRSrefname} and exists $BRShash{$BRSrefname}{'ref'}) {
-					print STDERR "Warnings: no conversion for seqID $BRSrefname\n";
+					print STDERR "Warnings: no conversion for seqID /$BRSrefname/\n";
+#					print Dumper $BRShash{$BRSrefname};### For test ###
 					print BRSBAMOUT $BRSline, "\n";
 					next;
 				}
@@ -2252,8 +2261,8 @@ sub BamRestoreSplit {
 				}
 				unless (exists $BRSlength_print{$BRSnewref}) {
 					$BRSline="\@SQ\tSN:".$BRSnewref."\tLN:".$BRSfulllength{$BRSnewref};
+					$BRSlength_print{$BRSnewref}++;
 				}
-				$BRSlength_print{$BRSnewref}++;
 			}
 		}
 		else {
