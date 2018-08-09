@@ -174,7 +174,7 @@ use FuhaoPerl5Lib::FileKit;
 use FuhaoPerl5Lib::MiscKit qw(IsReference);
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 
-$VERSION     = '20180705';
+$VERSION     = '20180809';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit);
@@ -2154,6 +2154,15 @@ sub BamRestoreSplit {
 	local *BRSBAMINPUT;
 	local *BRSBEDCOORDS;
 	local *BRSBAMOUT;
+	
+	unless (defined $BRSbamin and -s $BRSbamin) {
+		print STDERR $BRSsubinfo, "Error: invalid input BAM\n";
+		return $BamKit_failure;
+	}
+	unless (defined $BRSbed and -s $BRSbed) {
+		print STDERR $BRSsubinfo, "Error: invalid input BED\n";
+		return $BamKit_failure;
+	}
 	
 	close BRSBEDCOORDS if (defined fileno(BRSBEDCOORDS));
 	if ($BRSbed=~/\.bed\.gz$/i) {
