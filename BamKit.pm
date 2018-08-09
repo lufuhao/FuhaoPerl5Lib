@@ -2259,7 +2259,10 @@ sub BamRestoreSplit {
 					print STDERR "Warnings: conversion for seqID $BRSrefname got no full-length\n";
 					return $BamKit_failure;
 				}
-				unless (exists $BRSlength_print{$BRSnewref}) {
+				if (exists $BRSlength_print{$BRSnewref}) {
+					next;
+				}
+				else {
 					$BRSline="\@SQ\tSN:".$BRSnewref."\tLN:".$BRSfulllength{$BRSnewref};
 					$BRSlength_print{$BRSnewref}++;
 				}
@@ -2268,13 +2271,19 @@ sub BamRestoreSplit {
 		else {
 			my @BRSarr2=split(/\t/,$BRSline);
 			my $BRSprev_ref1=$BRSarr2[2];
+			my $BRSprev_ref2=$BRSarr2[6];
+			if ($BRSprev_ref2 eq '=') {
+				$BRSprev_ref2=$BRSarr2[2];
+			}
 			if (exists $BRShash{$BRSprev_ref1} and defined $BRSarr2[3] and $BRSarr2[3]=~/^\d+$/ and $BRSarr2[3]>0) {
 				$BRSarr2[2]=$BRShash{$BRSprev_ref1}{'ref'};
 				$BRSarr2[3]+=$BRShash{$BRSprev_ref1}{'start'};
 			}
-			my $BRSprev_ref2=$BRSarr2[6];
 			if (exists $BRShash{$BRSprev_ref2} and defined $BRSarr2[7] and $BRSarr2[7]=~/^\d+$/ and $BRSarr2[7]>0) {
 				$BRSarr2[6]=$BRShash{$BRSprev_ref2}{'ref'};
+				if ($BRSarr2[6] eq $BRSarr2[2]) {
+					$BRSarr2[6]='=';
+				}
 				$BRSarr2[7]+=$BRShash{$BRSprev_ref2}{'start'};
 			}
 			$BRSline=join("\t", @BRSarr2);
