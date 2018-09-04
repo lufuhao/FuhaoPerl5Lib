@@ -69,6 +69,11 @@ Perl Modules:
     * Note: need to double times for paired end, so k2 means unique for paired reads
     * Return: 1=Success    0=Failure
 
+=item BamMarkPairs ($input.R1.bam, $input.R2.bam, $output.R1.bam, $output.R2.bam, [path_samtools])
+
+    * Mark separately mapped FLAG to R1 67 R2 131
+    * Return: 1=Success    0=Failure
+
 =item BamRestoreSplit($bamin, $bed, $bamout, [$path_samtools])
 
     * Restore BAM coordintes due to splited reference
@@ -101,14 +106,14 @@ Perl Modules:
 
     * Return: 1=Sucesss    0=Failure
 
+=item GetListForSecondMapping (BAM_list_file, CHR_Keep_list_file, CHR_exclude_list_file, readnames_out_file, ref_out_file)
+
+    * Get reads names aligned to CHR_Keep_list_file and exclude reads names aligned to CHR_exclude_list_file, and then get all the refs that the remaining reads aligned to, for the second alignment
+    * Return: 1=Sucesss    0=Failure
+
 =item IndexBam($baminput, $path_samtools)
 
     * Return: 1=Sucesss    0=Failure
-
-=item BamMarkPairs ($input.R1.bam, $input.R2.bam, $output.R1.bam, $output.R2.bam, [path_samtools])
-
-    * Mark separately mapped FLAG to R1 67 R2 131
-    * Return: 1=Success    0=Failure
 
 =item ReadSam($file.sam,$ref,fa, ReturnCode(1/2/3))
 
@@ -175,12 +180,12 @@ use FuhaoPerl5Lib::MiscKit qw(IsReference);
 use Data::Dumper qw /Dumper/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 
-$VERSION     = '20180809';
+$VERSION     = '20180904';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit);
-%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit)],
-                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit)]);
+@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit GetListForSecondMapping);
+%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit GetListForSecondMapping)],
+                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit GetListForSecondMapping)]);
 
 
 
@@ -2295,6 +2300,178 @@ sub BamRestoreSplit {
 	
 	return $BamKit_success;
 }
+
+
+
+
+### Get reads names aligned to CHR_Keep_list_file and exclude reads names aligned to CHR_exclude_list_file, and then get all the refs that the remaining reads aligned to, for the second alignment
+### GetListForSecondMapping (BAM_list_file, CHR_Keep_list_file, CHR_exclude_list_file, readnames_out_file, ref_out_file)
+### Global: $BamKit_success; $BamKit_failure;
+### Dependency: samtools
+### Note:
+### Return: 1=Success    0= Failure
+sub GetListForSecondMapping {
+	my ($GLFSMbam_list_file, $GLFSMchrom_keep_list_file, $GLFSMchrom_exclude_list_file, $GLFSMreads_out_file, $GLFSMref_out)=@_;
+	
+	my $GLFSMsubinfo='SUB(GetListForSecondMapping)';
+	
+	my $GLFSMnumlines=0;
+	my %FLFSMbam_all_in=();
+	my %GLFSMref2keep=();
+	my %GLFSMref2exclude=();
+	my %GLFSMread2keep=();
+	my %GLFSMread2exclude=();
+	my %GLFSMref2final=();
+	local *GLFSMBAMLIST;
+	local *GLFSM_CHROM_KEEP; local *GLFSM_CHROM_EXCLUDED; local *GLFSM_BAMINPUT;
+	local *GLFSM_READ_FINAL;
+	local *GLFSM_REF_FINAL;
+	
+	print $GLFSMsubinfo, "Info: reading $GLFSMbam_list_file\n";
+	close GLFSMBAMLIST if (defined fileno(GLFSMBAMLIST));
+	unless (open GLFSMBAMLIST, "<", $GLFSMbam_list_file) {
+		print STDERR $GLFSMsubinfo, "Error: can not open file: BAM_list\n";
+		return $BamKit_failure;
+	}
+	while (my $GLFSMline=<GLFSMBAMLIST>) {
+		chomp $GLFSMline;
+		$GLFSMline=~s/\s+.*$//;
+		$FLFSMbam_all_in{$GLFSMline}++;
+	}
+	close GLFSMBAMLIST;
+	print $GLFSMsubinfo, "Info: Total BAMs: ", scalar(keys %FLFSMbam_all_in), "\n";
+	
+	print $GLFSMsubinfo, "Info: reading $GLFSMchrom_keep_list_file\n";
+	close GLFSM_CHROM_KEEP if (defined fileno(GLFSM_CHROM_KEEP));
+	unless (open GLFSM_CHROM_KEEP, "<", $GLFSMchrom_keep_list_file) {
+		print STDERR $GLFSMsubinfo, "Error: can not open file: chrom_keep_list\n";
+		return $BamKit_failure;
+	}
+	while (my $GLFSMline=<GLFSM_CHROM_KEEP>) {
+		chomp $GLFSMline;
+		$GLFSMline=~s/\s+.*$//;
+		$GLFSMref2keep{$GLFSMline}++;
+	}
+	close GLFSM_CHROM_KEEP;
+	print $GLFSMsubinfo, "Info: Total chrom to keep: ", scalar(keys %GLFSMref2keep), "\n";
+	
+	print $GLFSMsubinfo, "Info: reading $GLFSMchrom_exclude_list_file\n";
+	close GLFSM_CHROM_EXCLUDED if (defined fileno(GLFSM_CHROM_EXCLUDED));
+	unless (open GLFSM_CHROM_EXCLUDED, "<", $GLFSMchrom_exclude_list_file) {
+		print STDERR $GLFSMsubinfo, "Error: can not open file: chrom_exclude_list\n";
+		return $BamKit_failure;
+	}
+	while (my $GLFSMline=<GLFSM_CHROM_EXCLUDED>) {
+		chomp $GLFSMline;
+		$GLFSMline=~s/\s+.*$//;
+		$GLFSMref2exclude{$GLFSMline}++;
+	}
+	close GLFSM_CHROM_EXCLUDED;
+	print $GLFSMsubinfo, "Info: Total chrom to exclude: ", scalar(keys %GLFSMref2exclude), "\n";
+	
+	foreach my $GLFSMindbam (sort keys %FLFSMbam_all_in) {
+		print $GLFSMsubinfo, "Info: reading $GLFSMindbam\n";
+		close GLFSM_BAMINPUT if (defined fileno(GLFSM_BAMINPUT));
+		if ($GLFSMindbam=~/\.bam$/i) {
+			unless (open GLFSM_BAMINPUT, "samtools view $GLFSMindbam | ") {
+				print STDERR $GLFSMsubinfo, "Error: can not open BAM file: $GLFSMindbam\n";
+				return $BamKit_failure;
+			}
+		}
+		elsif ($GLFSMindbam=~/\.sam$/i) {
+			unless (open GLFSM_BAMINPUT, "samtools view -S $GLFSMindbam | ") {
+				print STDERR $GLFSMsubinfo, "Error: can not open SAM file: $GLFSMindbam\n";
+				return $BamKit_failure;
+			}
+		}
+		else {
+			print STDERR $GLFSMsubinfo, "Error: can not guess BAM format\n";
+			return $BamKit_failure;
+		}
+		$GLFSMnumlines=0;
+		while (my $GLFSMline=<GLFSM_BAMINPUT>) {
+			chomp $GLFSMline;
+			$GLFSMnumlines++;
+			my @GLFSMarr=split(/\t/, $GLFSMline);
+			my $GLFSMmate=0;
+			if (defined $GLFSMarr[1] and $GLFSMarr[1]=~/^\d+$/) {
+				if ($GLFSMarr[1] & 0x0040) {
+					$GLFSMmate=1;
+				}
+				elsif ($GLFSMarr[1] & 0x0080) {
+					$GLFSMmate=2;
+				}
+			}
+			else {
+				print STDERR $GLFSMsubinfo, "Warnings: invalid cigar (line$GLFSMnumlines): $GLFSMline in BAM file $GLFSMindbam\n";
+				next;
+			}
+			if (defined $GLFSMarr[2]) {
+				if (exists $GLFSMref2keep{$GLFSMarr[2]}) {
+					$GLFSMread2keep{$GLFSMarr[0]}{$GLFSMarr[2]}{$GLFSMmate}++;
+				}
+				if (exists $GLFSMref2exclude{$GLFSMarr[2]}) {
+					$GLFSMread2exclude{$GLFSMarr[0]}{$GLFSMarr[2]}{$GLFSMmate}++;
+				}
+			}
+			else {
+				print STDERR $GLFSMsubinfo, "Warnings: invalid ref (line$GLFSMnumlines): $GLFSMline in BAM file $GLFSMindbam\n";
+				next;
+			}
+		}
+		print $GLFSMsubinfo, "Total alignment: $GLFSMnumlines in BAM $GLFSMindbam\n";
+		close GLFSM_BAMINPUT;
+	}
+	
+	$GLFSMnumlines=0;
+	print $GLFSMsubinfo, "Info: writing $GLFSMreads_out_file\n";
+	close GLFSM_READ_FINAL if (defined fileno(GLFSM_READ_FINAL));
+	unless (open GLFSM_READ_FINAL, ">", $GLFSMreads_out_file) {
+		print STDERR $GLFSMsubinfo, "Error: can not write read out: $GLFSMreads_out_file\n";
+		return $BamKit_failure;
+	}
+	foreach my $GLFSMindreads (keys %GLFSMread2keep) {
+		my $GLFSMtest=1;
+		if (exists $GLFSMread2exclude{$GLFSMindreads}) {
+			foreach my $GLFSMrefs (keys %{$GLFSMread2exclude{$GLFSMindreads}}) {
+				if (exists $GLFSMread2exclude{$GLFSMindreads}{$GLFSMrefs}{'1'} and exists $GLFSMread2exclude{$GLFSMindreads}{$GLFSMrefs}{'2'}) {
+					$GLFSMtest=0;
+				}
+				elsif (exists $GLFSMread2exclude{$GLFSMindreads}{$GLFSMrefs}{'0'}) {
+					$GLFSMtest=0;
+				}
+			}
+		}
+		if ($GLFSMtest) {
+			$GLFSMnumlines++;
+			print GLFSM_READ_FINAL $GLFSMindreads, "\n";
+			foreach my $GLFSMrefs (keys %{$GLFSMread2keep{$GLFSMindreads}}) {
+				$GLFSMref2final{$GLFSMrefs}++;
+			}
+		}
+	}
+	close GLFSM_READ_FINAL;
+	print $GLFSMsubinfo, "Total final reads: $GLFSMnumlines\n";
+	
+	$GLFSMnumlines=0;
+	print $GLFSMsubinfo, "Info: writing $GLFSMref_out\n";
+	close GLFSM_REF_FINAL if (defined fileno(GLFSM_REF_FINAL));
+	unless (open GLFSM_REF_FINAL, ">", $GLFSMref_out) {
+		print STDERR $GLFSMsubinfo, "Error: can not write ref out: $GLFSMref_out\n";
+		return $BamKit_failure;
+	}
+	foreach my $GLFSMrefs (keys %GLFSMref2final) {
+		next if (exists $GLFSMref2exclude{$GLFSMrefs});
+		print GLFSM_REF_FINAL $GLFSMrefs, "\n";
+	}
+	close GLFSM_REF_FINAL;
+	print $GLFSMsubinfo, "Total final refs: $GLFSMnumlines\n";
+	
+	return $BamKit_success;
+}
+
+
+
 
 
 
