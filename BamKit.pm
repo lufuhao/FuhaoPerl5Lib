@@ -180,7 +180,7 @@ use FuhaoPerl5Lib::MiscKit qw(IsReference);
 use Data::Dumper qw /Dumper/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 
-$VERSION     = '20180904';
+$VERSION     = '20180905';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit GetListForSecondMapping);
@@ -2336,6 +2336,7 @@ sub GetListForSecondMapping {
 	while (my $GLFSMline=<GLFSMBAMLIST>) {
 		chomp $GLFSMline;
 		$GLFSMline=~s/\s+.*$//;
+		$GLFSMline=~s/^\s+//;
 		$FLFSMbam_all_in{$GLFSMline}++;
 	}
 	close GLFSMBAMLIST;
