@@ -106,6 +106,17 @@ Perl Modules:
 
     * Return: 1=Sucesss    0=Failure
 
+=item EvaluateMultimapping (in.bam, reads.out.names, refs.out.names)
+
+    * Evaluate multi-mapping by counting mapping times, output paired-mapping reads and their refs
+    * Dependency: samtools
+    * Return: 1=Success    0= Failure
+
+=item GetBamMate (BAM_FLAG_value)
+
+    * Get Mate info from a BAM FLAG
+    * Return: 0=NOT_paired; 1=R1 in pair; 2=R2 in pair
+
 =item GetListForSecondMapping (BAM_list_file, CHR_Keep_list_file, CHR_exclude_list_file, readnames_out_file, ref_out_file)
 
     * Get reads names aligned to CHR_Keep_list_file and exclude reads names aligned to CHR_exclude_list_file, and then get all the refs that the remaining reads aligned to, for the second alignment
@@ -180,18 +191,41 @@ use FuhaoPerl5Lib::MiscKit qw(IsReference);
 use Data::Dumper qw /Dumper/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 
-$VERSION     = '20180905';
+$VERSION     = '20180907';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit GetListForSecondMapping);
-%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit GetListForSecondMapping)],
-                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit GetListForSecondMapping)]);
+@EXPORT_OK   = qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit GetListForSecondMapping GetBamMate EvaluateMultimapping);
+%EXPORT_TAGS = ( DEFAULT => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit GetListForSecondMapping GetBamMate)],
+                 Both    => [qw(IndexBam ExtactBam SplitCigar SamCleanHeader Bam2FastQ SortBam CalcFPKM ReduceReadNameLength ReadSam Bam2FastqProg VerifyCigarLength CalCigarRefLength BamFilterReadsByNames BamExtractReadsUsingBed BamKeepBothMates BamMarkPairs BamKeepNumAlignemnts BamAtacShift BamRestoreSplit GetListForSecondMapping GetBamMate EvaluateMultimapping)]);
 
 
 
 my $BamKit_success=1;
 my $BamKit_failure=0;
 my $BamKit_debug=0;
+
+
+
+### Get Mate info from a BAM FLAG
+### GetBamMate (BAM_FLAG_value)
+### Global: 
+### Dependency: 
+### Note:
+### Return: 0=NOT_paired; 1=R1 in pair; 2=R2 in pair
+sub GetBamMate {
+	my $GBMflag=shift @_;
+	
+	my $GBMmate=0;
+	if ($GBMflag & 0x0040) {
+		$GBMmate=1;
+	}
+	elsif ($GBMflag & 0x0080) {
+		$GBMmate=2;
+	}
+	
+	return $GBMmate;
+}
+
 
 
 ### samtools index sorted BAM
@@ -2473,7 +2507,126 @@ sub GetListForSecondMapping {
 
 
 
+### Evaluate multi-mapping by counting mapping times
+### EvaluateMultimapping (in.bam, reads.out.names, refs.out.names)
+### Global: $BamKit_success; $BamKit_failure;
+### Dependency: samtools
+### Note:
+### Return: 1=Success    0= Failure
+sub EvaluateMultimapping {
+	my ($EMfile_in_bam, $EMfile_out_reads, $EMfile_out_refs)=@_;
+	
+	my $EMsubinfo='SUB(BamKit::EvaluateMultimapping)';
+	my $EMnumlines=0;
+	my %EMreads2ref=();
+	my %EMrefs=();
+	my $EMnum_multi_mapping=0;
+	my $EMnum_unique_mapping=0;
+	my $EMnum_mapping_unpaired=0;
+	my $EMnum_mapping_paired=0;
+	local *EMBAMINPUT; local *EMOUTREADS; local *EMOUTREFERENCES;
+	
+	unless (defined $EMfile_in_bam and -s $EMfile_in_bam) {
+		print STDERR $EMsubinfo, "Error: invalid BAM input\n";
+		return $BamKit_failure;
+	}
+	
+	print $EMsubinfo, "Info: BAM input  : $EMfile_in_bam\n";
+	print $EMsubinfo, "Info: read out   : $EMfile_out_reads\n";
+	print $EMsubinfo, "Info: refs input : $EMfile_out_refs\n";
+	
+	close EMBAMINPUT if(defined fileno(EMBAMINPUT));
+	if ($EMfile_in_bam=~/\.bam$/i) {
+		unless (open EMBAMINPUT, "samtools view $EMfile_in_bam | ") {
+			print STDERR $EMsubinfo, "Error: can not open BAM input: $EMfile_in_bam\n";
+			return $BamKit_failure;
+		}
+	}
+	elsif ($EMfile_in_bam=~/\.sam$/i) {
+		unless (open EMBAMINPUT, "samtools view -S $EMfile_in_bam | ") {
+			print STDERR $EMsubinfo, "Error: can not open SAM input: $EMfile_in_bam\n";
+			return $BamKit_failure;
+		}
+	}
+	else {
+		print STDERR $EMsubinfo, "Error: can not guess BAM input format [.bam/.sam]: $EMfile_in_bam\n";
+		return $BamKit_failure;
+	}
+	while (my $EMline=<EMBAMINPUT>) {
+		chomp $EMline;
+		$EMnumlines++;
+		my @EMalignments=split(/\t/, $EMline);
+		unless (scalar(@EMalignments)>=11) {
+			print STDERR $EMsubinfo, "Warnings: ignored alignments (nCol<11): $EMline\n";
+			next;
+		}
+		unless ($EMalignments[1]=~/^\d+$/) {
+			print STDERR $EMsubinfo, "Warnings: ignored alignments (FLAG): $EMline\n";
+			next;
+		}
+		if ($EMalignments[1] & 0x0004) {#unmapped
+			next;
+		}
+		unless ((defined $EMalignments[2]) and ($EMalignments[2] ne '*')) {#unmapped
+			next;
+		}
+		my $EMmate=&GetBamMate($EMalignments[1]);
+		$EMreads2ref{$EMalignments[0]}{$EMalignments[2]}{$EMmate}++;
+	}
+	
+	close EMBAMINPUT;
+	close EMOUTREADS if (defined fileno(EMOUTREADS));
+	unless (open EMOUTREADS, ">", $EMfile_out_reads) {
+		print STDERR $EMsubinfo, "Error: can not write reads output: $EMfile_out_reads\n";
+		return $BamKit_failure;
+	}
+	foreach my $EMindread (keys %EMreads2ref) {
+		foreach my $EMindref (keys %{$EMreads2ref{$EMindread}}) {
+			if (exists $EMreads2ref{$EMindread}{$EMindref}{'1'} and exists $EMreads2ref{$EMindread}{$EMindref}{'2'}) {
+				$EMnum_mapping_paired++;
+				$EMrefs{$EMindref}++;
+			}
+			elsif (exists $EMreads2ref{$EMindread}{$EMindref}{'0'}) {
+				$EMnum_mapping_unpaired++;
+				$EMrefs{$EMindref}++;
+			}
+			else {
+				$EMnum_mapping_unpaired++;
+			}
+		}
+		my $EMind_mapping_times=scalar(keys %{$EMreads2ref{$EMindread}});
+		if ($EMind_mapping_times>0) {
+			if ($EMind_mapping_times==1) {
+				$EMnum_unique_mapping++;
+			}
+			elsif ($EMind_mapping_times>1) {
+				$EMnum_multi_mapping++;
+			}
+			print EMOUTREADS $EMindread, "\n";
+		}
+	}
+	close EMOUTREADS;
+	print $EMsubinfo, "Info: Total paired alignments:   $EMnum_mapping_paired\n";
+	print $EMsubinfo, "Info: Total unpaired alignments: $EMnum_mapping_unpaired\n";
+	
+	print $EMsubinfo, "Info: Total reads:               ", scalar(keys %EMreads2ref), "\n";
+	print $EMsubinfo, "Info: Total refs :               ", scalar(keys %EMrefs), "\n";
+	
+	print $EMsubinfo, "Info: Total uniquemapped reads:  $EMnum_unique_mapping\n";
+	print $EMsubinfo, "Info: Total multimapped reads :  $EMnum_multi_mapping\n";
+	
+	close EMOUTREFERENCES if (defined fileno(EMOUTREFERENCES));
+	unless (open EMOUTREFERENCES, ">", $EMfile_out_refs) {
+		print STDERR $EMsubinfo, "Error: can not write refs output: $EMfile_out_refs\n";
+		return $BamKit_failure;
+	}
+	foreach my $EMindref (keys %EMrefs) {
+		print EMOUTREFERENCES $EMindref, "\n";
+	}
+	close EMOUTREFERENCES;
 
+	return $BamKit_success;
+}
 
 
 
