@@ -31,12 +31,17 @@ Perl Modules:
     * Reformat exonerate GFF3
     * Return: 1=success, 0=failure
 
+=item GffAddUTR ($mrna, $exon, $cds)
+
+    * Add GFF3 UTR feature
+    * Note: Input are FuhaoPerl5LIB::GffKit=ReadGff3 hash index
+    * Return: (1/0, $utr)
+
 =item Gff3Renamer (gffin, id_list, gffout)
 
     * rename geneID after scaffolding to a pseudomolecule
     * $id_list (2 column: first col = old_ID; second col = new_ID)
          old_id1	new_id1
-
 
 =item GffReverseStrand (input.gff3, reference.fa/fai, output.gff3, samtools_path)
 
@@ -101,7 +106,7 @@ Perl Modules:
           grep -E "\tgene\t" xxx.gff3 > gff3.genelist
     * Return: 1=Sucesss    0=Failure
 
-=item WriteGff3 ($outgff3, $referenceids, $gene2mrna, $gene, $mrna, $exon, $cds)
+=item WriteGff3 ($outgff3, $referenceids, $gene2mrna, $gene, $mrna, $exon, $cds, $utr)
 
     * Write ReadGff3 object to GFF3 file
     * Return: 1=Sucesss    0=Failure
@@ -143,13 +148,12 @@ use Bio::DB::Fasta;
 use Data::Dumper qw/Dumper/;
 use Storable qw/dclone/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20180709';
+$VERSION     = '20180920';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer GuessLongestCDS);
-%EXPORT_TAGS = ( DEFAULT => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer GuessLongestCDS)],
-                 ALL    => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer GuessLongestCDS)]);
-
+@EXPORT_OK   = qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer GuessLongestCDS GffAddUTR);
+%EXPORT_TAGS = ( DEFAULT => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer GuessLongestCDS GffAddUTR)],
+                 ALL    => [qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer GuessLongestCDS GffAddUTR)]);
 my $GffKit_success=1;
 my $GffKit_failure=0;
 my $GffKit_debug=0;
@@ -323,6 +327,13 @@ sub GffReverseStrand {
 ###                   'phase'     => ({$arr[3]} => ($arr[4] => $arr[7]))
 ###                   )
 ###       )
+### %utr=($mrnaid => ('reference' => $arr[0],
+###                   'utr3'       => ({$arr[3]} => ($arr[4] => num++)),
+###                   'utr5'       => ({$arr[3]} => ($arr[4] => num++)),
+###                   'strand'    => $arr[6],
+###                   'score'     => $arr[5],
+###                   )
+###       )
 sub ReadGff3 {
 	my ($RGgffin, $RGfasta)=@_;
 	
@@ -333,6 +344,7 @@ sub ReadGff3 {
 	my $RGgene2mrna={};
 	my $RGmrnas={};
 	my $RGexons={};
+	my $RGutr={};
 	my %RGmrna2gene=();
 	my %RGmrna_border=();
 	my $RGcheck_phase=0;
@@ -529,6 +541,92 @@ sub ReadGff3 {
 					return $GffKit_failure;
 				}
 				${$RGcds}{$RGindpar}{'phase'}{$RGarr[3]}{$RGarr[4]}=$RGarr[7];
+			}
+		}
+		elsif ($RGarr[2] =~ /^five_prime_UTR$/i) {
+			my $RGparent=$RGarr[8];
+			$RGparent=~s/^.*Parent=//; $RGparent=~s/;.*$//;
+			print "Test: UTR5 $RGarr[3]-$RGarr[4] \tParent: $RGparent\n" if ($GffKit_debug);### For test ###
+			my @RGtemparr=split(/,/, $RGparent);
+			foreach my $RGindpar (@RGtemparr) {
+				${$RGutr}{$RGindpar}{'utr5'}{$RGarr[3]}{$RGarr[4]}++;
+				if (exists ${$RGutr}{$RGindpar}{'strand'}) {
+					if (${$RGutr}{$RGindpar}{'strand'} ne $RGarr[6]) {
+						print STDERR $RGsubinfo, "Error: UTR5 strand problem at line($.): \n$RGline\n";
+						return $GffKit_failure;
+					}
+				}
+				else {
+					${$RGutr}{$RGindpar}{'strand'}=$RGarr[6];
+				}
+				if ($RGarr[5]=~/^\d+\.*\d*$/) {
+					if (exists ${$RGutr}{$RGindpar}{'score'}) {
+						if (${$RGutr}{$RGindpar}{'score'}=~/^\d+\.*\d*$/){
+							if ($RGarr[5] > ${$RGutr}{$RGindpar}{'score'}) {
+								${$RGutr}{$RGindpar}{'score'}=$RGarr[5];
+							}
+						}
+						${$RGutr}{$RGindpar}{'score'}=$RGarr[5];
+					}
+					else {
+						${$RGutr}{$RGindpar}{'score'}=$RGarr[5];
+					}
+				}
+				else {
+					${$RGutr}{$RGindpar}{'score'}=$RGarr[5];
+				}
+				if (${$RGutr}{$RGindpar}{'reference'}) {
+					if (${$RGutr}{$RGindpar}{'reference'} ne $RGarr[0]) {
+						print STDERR $RGsubinfo, "Error: UTR5 ref problem at line($.): \n$RGline\n";
+						return $GffKit_failure;
+					}
+				}
+				else {
+					${$RGutr}{$RGindpar}{'reference'}=$RGarr[0];
+				}
+			}
+		}
+		elsif ($RGarr[2] =~ /^three_prime_UTR$/i) {
+			my $RGparent=$RGarr[8];
+			$RGparent=~s/^.*Parent=//; $RGparent=~s/;.*$//;
+			print "Test: UTR3 $RGarr[3]-$RGarr[4] \tParent: $RGparent\n" if ($GffKit_debug);### For test ###
+			my @RGtemparr=split(/,/, $RGparent);
+			foreach my $RGindpar (@RGtemparr) {
+				${$RGutr}{$RGindpar}{'utr3'}{$RGarr[3]}{$RGarr[4]}++;
+				if (exists ${$RGutr}{$RGindpar}{'strand'}) {
+					if (${$RGutr}{$RGindpar}{'strand'} ne $RGarr[6]) {
+						print STDERR $RGsubinfo, "Error: UTR3 strand problem at line($.): \n$RGline\n";
+						return $GffKit_failure;
+					}
+				}
+				else {
+					${$RGutr}{$RGindpar}{'strand'}=$RGarr[6];
+				}
+				if ($RGarr[5]=~/^\d+\.*\d*$/) {
+					if (exists ${$RGutr}{$RGindpar}{'score'}) {
+						if (${$RGutr}{$RGindpar}{'score'}=~/^\d+\.*\d*$/){
+							if ($RGarr[5] > ${$RGutr}{$RGindpar}{'score'}) {
+								${$RGutr}{$RGindpar}{'score'}=$RGarr[5];
+							}
+						}
+						${$RGutr}{$RGindpar}{'score'}=$RGarr[5];
+					}
+					else {
+						${$RGutr}{$RGindpar}{'score'}=$RGarr[5];
+					}
+				}
+				else {
+					${$RGutr}{$RGindpar}{'score'}=$RGarr[5];
+				}
+				if (${$RGutr}{$RGindpar}{'reference'}) {
+					if (${$RGutr}{$RGindpar}{'reference'} ne $RGarr[0]) {
+						print STDERR $RGsubinfo, "Error: UTR3 ref problem at line($.): \n$RGline\n";
+						return $GffKit_failure;
+					}
+				}
+				else {
+					${$RGutr}{$RGindpar}{'reference'}=$RGarr[0];
+				}
 			}
 		}
 	}
@@ -1252,7 +1350,7 @@ sub SplitGff3Feature {
 
 ### Return: 1=success, 0=failed
 sub WriteGff3 {
-	my ($WGoutgff3, $WGref2gene, $WGgene2mrna, $WGgene, $WGmrna, $WGexon, $WGcds) =@_;
+	my ($WGoutgff3, $WGref2gene, $WGgene2mrna, $WGgene, $WGmrna, $WGexon, $WGcds, $WGutr) =@_;
 	
 	my $WGsubinfo='SUB(GffKit::WriteGff3)';
 	local *WGGFF3OUT;
@@ -1426,6 +1524,8 @@ sub WriteGff3 {
 									(${$WGcds}{$WGmrnaid}{'reference'} eq $WGref)
 							) {
 								print STDERR $WGsubinfo, "Error: inconsistent CDS ref: mRNA $WGmrnaid\n";
+								print Dumper ${$WGcds}{$WGmrnaid};
+								print Dumper $WGcds;
 								return $GffKit_failure;
 							}
 							unless (exists ${$WGcds}{$WGmrnaid}{'strand'} and 
@@ -1437,6 +1537,30 @@ sub WriteGff3 {
 							my $WGcdsscore='.';
 							if (exists ${$WGcds}{$WGmrnaid}{'score'} and ${$WGcds}{$WGmrnaid}{'score'} =~/^\d+$/) {
 								$WGcdsscore=${$WGcds}{$WGmrnaid}{'score'};
+							}
+							if (exists ${$WGutr}{$WGmrnaid}) {###UTR
+								if (exists ${$WGutr}{$WGmrnaid}{'strand'}) {
+									if (${$WGutr}{$WGmrnaid}{'strand'} eq '+') {
+										if (exists ${$WGutr}{$WGmrnaid}{'utr5'}) {
+											foreach my $WGind_x (sort {$a<=>$b} keys %{${$WGutr}{$WGmrnaid}{'utr5'}}) {
+												foreach my $WGind_y (sort {$a<=>$b} keys %{${$WGutr}{$WGmrnaid}{'utr5'}{$WGind_x}}) {
+													my @WGutr=(${$WGutr}{$WGmrnaid}{'reference'}, '.', 'five_prime_UTR', $WGind_x, $WGind_y, ${$WGutr}{$WGmrnaid}{'score'}, ${$WGutr}{$WGmrnaid}{'strand'}, '.', "Parent=$WGmrnaid");
+													print WGGFF3OUT join ("\t", @WGutr), "\n";
+												}
+											}
+										}
+									}
+									if (${$WGutr}{$WGmrnaid}{'strand'} eq '-') {
+										if (exists ${$WGutr}{$WGmrnaid}{'utr3'}) {
+											foreach my $WGind_x (sort {$a<=>$b} keys %{${$WGutr}{$WGmrnaid}{'utr3'}}) {
+												foreach my $WGind_y (sort {$a<=>$b} keys %{${$WGutr}{$WGmrnaid}{'utr3'}{$WGind_x}}) {
+													my @WGutr=(${$WGutr}{$WGmrnaid}{'reference'}, '.', 'three_prime_UTR', $WGind_x, $WGind_y, ${$WGutr}{$WGmrnaid}{'score'}, ${$WGutr}{$WGmrnaid}{'strand'}, '.', "Parent=$WGmrnaid");
+													print WGGFF3OUT join ("\t", @WGutr), "\n";
+												}
+											}
+										}
+									}
+								}
 							}
 							if (exists ${$WGcds}{$WGmrnaid}{'cds'} and 
 								(scalar(keys %{${$WGcds}{$WGmrnaid}{'cds'}})>0)
@@ -1468,6 +1592,30 @@ sub WriteGff3 {
 							else {
 								print STDERR $WGsubinfo, "Error: mRNA no CDS region: mRNA $WGmrnaid\n";
 								return $GffKit_failure;
+							}
+							if (exists ${$WGutr}{$WGmrnaid}) {###UTR
+								if (exists ${$WGutr}{$WGmrnaid}{'strand'}) {
+									if (${$WGutr}{$WGmrnaid}{'strand'} eq '+') {
+										if (exists ${$WGutr}{$WGmrnaid}{'utr3'}) {
+											foreach my $WGind_x (sort {$a<=>$b} keys %{${$WGutr}{$WGmrnaid}{'utr3'}}) {
+												foreach my $WGind_y (sort {$a<=>$b} keys %{${$WGutr}{$WGmrnaid}{'utr3'}{$WGind_x}}) {
+													my @WGutr=(${$WGutr}{$WGmrnaid}{'reference'}, '.', 'three_prime_UTR', $WGind_x, $WGind_y, ${$WGutr}{$WGmrnaid}{'score'}, ${$WGutr}{$WGmrnaid}{'strand'}, '.', "Parent=$WGmrnaid");
+													print WGGFF3OUT join ("\t", @WGutr), "\n";
+												}
+											}
+										}
+									}
+									if (${$WGutr}{$WGmrnaid}{'strand'} eq '-') {
+										if (exists ${$WGutr}{$WGmrnaid}{'utr5'}) {
+											foreach my $WGind_x (sort {$a<=>$b} keys %{${$WGutr}{$WGmrnaid}{'utr5'}}) {
+												foreach my $WGind_y (sort {$a<=>$b} keys %{${$WGutr}{$WGmrnaid}{'utr5'}{$WGind_x}}) {
+													my @WGutr=(${$WGutr}{$WGmrnaid}{'reference'}, '.', 'five_prime_UTR', $WGind_x, $WGind_y, ${$WGutr}{$WGmrnaid}{'score'}, ${$WGutr}{$WGmrnaid}{'strand'}, '.', "Parent=$WGmrnaid");
+													print WGGFF3OUT join ("\t", @WGutr), "\n";
+												}
+											}
+										}
+									}
+								}
 							}
 						}
 						else {
@@ -2611,6 +2759,120 @@ sub GetCdsCoods {
 ###                   )
 ###       )
 
+
+
+
+### %mrnas=($geneid => ('reference' => $arr[0],
+###                     'start'     => $arr[3], 
+###                     'end'       => $arr[4],
+###                     'strand'    => $arr[6],
+###                     'score'     => $arr[5],
+###                     'Note'      => $note ###Not necessarily exist
+###                     'Parent'    => $geneID
+###                    )
+###       )
+### %exon=($mrnaid => ('reference' => $arr[0],
+###                    'exon'      => ({$arr[3]} => ($arr[4] => $exonid)),
+###                    'strand'    => $arr[6],
+###                    'score'     => $arr[5]
+###                    )
+###       )
+### %cds=($mrnaid => ('reference' => $arr[0],
+###                   'cds'       => ({$arr[3]} => ($arr[4] => num++)),
+###                   'strand'    => $arr[6],
+###                   'score'     => $arr[5],
+###                   'phase'     => ({$arr[3]} => ($arr[4] => $arr[7]))
+###                   )
+###       )
+### %utr=($mrnaid => ('reference' => $arr[0],
+###                   'utr3'       => ({$arr[3]} => ($arr[4] => num++)),
+###                   'utr5'       => ({$arr[3]} => ($arr[4] => num++)),
+###                   'strand'    => $arr[6],
+###                   'score'     => $arr[5],
+###                   )
+###       )
+### Add GFF3 UTR feature
+### ($test, $utr)=GffAddUTR ($mrna, $exon, $cds)
+### Global:
+### Denpendecy:
+### Note:
+### Input are ReadGff3 hash index
+sub GffAddUTR {
+	my ($GAUmrna, $GAUexon, $GAUcds)=@_;
+	
+	my $GAUsubinfo="SUB(GffKit::GffAddUTR)";
+	my $GAUutr={};
+	
+	foreach my $GAUmrna_id (sort keys %{$GAUmrna}) {
+		my $GAUleft=${$GAUmrna}{$GAUmrna_id}{'start'};
+		my $GAUright=${$GAUmrna}{$GAUmrna_id}{'end'};
+		unless (exists ${$GAUcds}{$GAUmrna_id} and exists ${$GAUcds}{$GAUmrna_id}{'cds'}) {### no CDS or pseudogene
+			next;
+		}
+		my @GAUcdsarr=();
+		foreach my $GAUcds_start (keys %{${$GAUcds}{$GAUmrna_id}{'cds'}}) {
+			push (@GAUcdsarr, $GAUcds_start);
+			foreach my $GAUcds_end (keys %{${$GAUcds}{$GAUmrna_id}{'cds'}{$GAUcds_start}}) {
+				push (@GAUcdsarr, $GAUcds_end);
+			}
+		}
+		my @GAUcdsarr_sort=sort {$a<=>$b} @GAUcdsarr;
+		unless (scalar(@GAUcdsarr_sort)>=2) {
+			print STDERR $GAUsubinfo, "Error: mRNA no CDS: $GAUmrna_id\n";
+			return $GffKit_failure;
+		}
+		my $GAUmin=$GAUcdsarr_sort[0];
+		my $GAUmax=$GAUcdsarr_sort[-1];
+		unless (exists ${$GAUexon}{$GAUmrna_id} or exists ${$GAUexon}{$GAUmrna_id}{'exon'}) {
+			print STDERR $GAUsubinfo, "Error: mRNA no exons: $GAUmrna_id\n";
+			next;
+		}
+		
+		foreach my $GAUexon_start (sort {$a<=>$b} keys %{${$GAUexon}{$GAUmrna_id}{'exon'}}) {
+			
+			foreach my $GAUexon_end (sort {$a<=>$b} keys %{${$GAUexon}{$GAUmrna_id}{'exon'}{$GAUexon_start}}) {
+				if ($GAUmin>$GAUexon_end) {
+					if (${$GAUmrna}{$GAUmrna_id}{'strand'} eq '+') {
+						${$GAUutr}{$GAUmrna_id}{'utr5'}{$GAUexon_start}{$GAUexon_end}++;
+					}
+					if (${$GAUmrna}{$GAUmrna_id}{'strand'} eq '-') {
+						${$GAUutr}{$GAUmrna_id}{'utr3'}{$GAUexon_start}{$GAUexon_end}++;
+					}
+				}
+				elsif ($GAUmin>$GAUexon_start and $GAUmin<=$GAUexon_end) {
+					if (${$GAUmrna}{$GAUmrna_id}{'strand'} eq '+') {
+						${$GAUutr}{$GAUmrna_id}{'utr5'}{$GAUexon_start}{$GAUmin-1}++;
+					}
+					if (${$GAUmrna}{$GAUmrna_id}{'strand'} eq '-') {
+						${$GAUutr}{$GAUmrna_id}{'utr3'}{$GAUexon_start}{$GAUmin-1}++;
+					}
+				}
+				if ($GAUmax<$GAUexon_start) {
+					if (${$GAUmrna}{$GAUmrna_id}{'strand'} eq '+') {
+						${$GAUutr}{$GAUmrna_id}{'utr3'}{$GAUexon_start}{$GAUexon_end}++;
+					}
+					if (${$GAUmrna}{$GAUmrna_id}{'strand'} eq '-') {
+						${$GAUutr}{$GAUmrna_id}{'utr5'}{$GAUexon_start}{$GAUexon_end}++;
+					}
+				}
+				elsif ($GAUmax>=$GAUexon_start and $GAUmax<$GAUexon_end) {
+					if (${$GAUmrna}{$GAUmrna_id}{'strand'} eq '+') {
+						${$GAUutr}{$GAUmrna_id}{'utr3'}{$GAUmax+1}{$GAUexon_end}++;
+					}
+					if (${$GAUmrna}{$GAUmrna_id}{'strand'} eq '-') {
+						${$GAUutr}{$GAUmrna_id}{'utr5'}{$GAUmax+1}{$GAUexon_end}++;
+					}
+				}
+			}
+		}
+		if (exists ${$GAUutr}{$GAUmrna_id}) {
+			${$GAUutr}{$GAUmrna_id}{'strand'}=${$GAUmrna}{$GAUmrna_id}{'strand'};
+			${$GAUutr}{$GAUmrna_id}{'reference'}=${$GAUmrna}{$GAUmrna_id}{'reference'};
+			${$GAUutr}{$GAUmrna_id}{'score'}=${$GAUmrna}{$GAUmrna_id}{'score'};
+		}
+	}
+	return ($GffKit_success, $GAUutr);
+}
 
 
 
