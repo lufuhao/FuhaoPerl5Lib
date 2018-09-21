@@ -2441,7 +2441,10 @@ sub Gff3Renamer {
 		elsif ($GRarr[2]=~/^CDS$/i) {
 			$GRoldid=~s/^.*Parent=//; $GRoldid=~s/;.*$//; $GRoldid=~s/\.\d+$//;
 		}
-		elsif ($GRarr[2]=~/^UTR$/i) {
+		elsif ($GRarr[2]=~/^five_prime_UTR$/i) {
+			$GRoldid=~s/^.*Parent=//; $GRoldid=~s/;.*$//; $GRoldid=~s/\.\d+$//;
+		}
+		elsif ($GRarr[2]=~/^three_prime_UTR$/i) {
 			$GRoldid=~s/^.*Parent=//; $GRoldid=~s/;.*$//; $GRoldid=~s/\.\d+$//;
 		}
 		else {
