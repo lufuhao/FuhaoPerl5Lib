@@ -1072,7 +1072,7 @@ sub ReadGff3 {
 	}
 	%RGmrna2gene=();
 	%RGmrna_border=();
-	return ($GffKit_success, $RGreferenceids, $RGgene, $RGgene2mrna, $RGmrnas, $RGexons, $RGcds);
+	return ($GffKit_success, $RGreferenceids, $RGgene, $RGgene2mrna, $RGmrnas, $RGexons, $RGcds, $RGutr);
 }
 ### Convert exons coordinates hash into array, and check if exonID unique
 ### &GetCoordArray ($hash)
