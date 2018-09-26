@@ -155,8 +155,15 @@ Fasta -related tools
 
 =item ReadFastaLength ($input.fa[.gz])
 
-     Read fasta seq length into hash \$hash={('seqid1' => length1, 'seqid2' => length2,)}
-     Return: (1=Success/0=failure, $hash)
+    * Read fasta seq length into hash \$hash={('seqid1' => length1, 'seqid2' => length2,)}
+    * Requirement: gzip
+    * Return: (1=Success/0=failure, $hash)
+
+=item ReadFastaLength2 ($input.fa[.gz])
+
+    * Read fasta seq length into hash \$hash={('seqid1' => length1, 'seqid2' => length2,)}
+    * Requirement: Bio::DB::Fasta
+    * Return: $hash
 
 =item RenameFasta ($fastain, $fastqout, $prefix, $num_digit, $RFDesc)
 
@@ -272,12 +279,12 @@ use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
 use Bio::SeqIO;
 use Bio::DB::Fasta;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20180704';
+$VERSION     = '20180926';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq);
-%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq)],
-                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq ReadFastaLength2);
+%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq ReadFastaLength2)],
+                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq ReadFastaLength2)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -2018,9 +2025,9 @@ sub FastaDedup {
 
 
 
-### Read [gzipped fasta get the length into hash]
+### Read [gzipped] fasta get the length into hash
 ### ReadFastaLength($fasta[.gz])
-### 
+### return: (1/0, $ret={ seq1 => len1, seq2 => len2 })
 sub ReadFastaLength {
 	my $RFLfasta=shift;
 	
@@ -2092,7 +2099,23 @@ sub ReadFastaLength {
 	print $RFLsubinfo, "Sum: read total seqs ", scalar(keys %RFLseqlength), "\n";
 	return ($FastaKit_success, \%RFLseqlength);
 }
-
+### Read fasta get the length into hash
+### ReadFastaLength2($fasta)
+### Requirement: Bio::DB::Fasta
+### return: $ret={ seq1 => len1, seq2 => len2 }
+sub ReadFastaLength2 {
+	my $RFLfasta=shift;
+	
+	my $RFLret_hash={};
+	my $RFLseqdb=Bio::DB::Fasta->new($RFLfasta);
+	my @RFLids = $RFLseqdb->get_all_primary_ids;
+	
+	foreach my $RFLseqid (@RFLids) {
+		${$RFLret_hash}{$RFLseqid}=$RFLseqdb->length($RFLseqid);
+	}
+	
+	return $RFLret_hash;
+}
 
 
 ### Rename sspace-scaffolded fasta to a standard format

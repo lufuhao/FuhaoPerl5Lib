@@ -57,10 +57,10 @@ Perl Modules:
     *     GLCnum_top is the top INT, how many top longest you want
     * Return: (1/0, $gene2mrna, $mrna, $exon, $cdss);
 
-=item ReadGff3($gffin, $fasta)
+=item ReadGff3($gffin[, $fasta])
 
     * Read GFF3 into hash
-    * ($success, $referenceids, $gene, $gene2mrna, $mrnas, $exons, $cds)=ReadGff3($gffin, $fasta)
+    * ($success, $referenceids, $gene, $gene2mrna, $mrnas, $exons, $cds)=ReadGff3($gffin[, $fasta])
     * %referenceids  => ( $reference_id => $gene_start_pos => $gene_id => num++)
     * %gene2mrna     => ( $gene_id => $mrna_id => num++ )
     * %gene=($geneid => ('reference' => $arr[0],
@@ -92,6 +92,13 @@ Perl Modules:
                         'strand'    => $arr[6],
                         'score'     => $arr[5],
                         'phase'     => ({$arr[3]} => ($arr[4] => $arr[7]))
+                       )
+           )
+    * %utr=($mrnaid => ('reference' => $arr[0],
+                        'utr3'       => ({$arr[3]} => ($arr[4] => num++)),
+                        'utr5'       => ({$arr[3]} => ($arr[4] => num++)),
+                        'strand'    => $arr[6],
+                        'score'     => $arr[5],
                        )
            )
 
@@ -292,7 +299,7 @@ sub GffReverseStrand {
 
 
 ### Read GFF3 into hash
-### ($success, $referenceids, $gene, $gene2mrna, $mrnas, $exons, $cds)=ReadGff3($RGgffin, $RGfasta)
+### ($success, $referenceids, $gene, $gene2mrna, $mrnas, $exons, $cds)=ReadGff3($RGgffin[, $RGfasta])
 ###
 ### %referenceids  => ( $reference_id => $gene_start_pos => $gene_id => num++)
 ### %gene2mrna     => ( $gene_id => $mrna_id => num++ )
@@ -396,11 +403,11 @@ sub ReadGff3 {
 			next;
 		}
 		my $feature_hash=&SplitGff3Feature($RGarr[8]);
-		unless (exists ${$feature_hash}{'ID'}) {
-			print STDERR $RGsubinfo, "Error: no ID in col9 at line($.): ".$RGline."\n" ;
-			return  $GffKit_failure;
-		}
 		if ($RGarr[2] =~ /^gene$/i) {
+			unless (exists ${$feature_hash}{'ID'}) {
+				print STDERR $RGsubinfo, "Error: no ID in col9 at line($.): ".$RGline."\n" ;
+				return  $GffKit_failure;
+			}
 			my $RGthisgeneid=${$feature_hash}{'ID'};
 			if (exists ${$RGgene}{$RGthisgeneid}) {
 				print STDERR $RGsubinfo, "Error: duplicated gene ID: $RGthisgeneid\n";
@@ -419,6 +426,10 @@ sub ReadGff3 {
 #			print $RGsubinfo, "Test: geneid: ",$RGthisgeneid , "\tgenenote: ",${$RGgene}{$RGthisgeneid}{'Note'},  "\n" if ($GffKit_debug); ### For test ###
 		}
 		elsif ($RGarr[2] =~ /^mRNA$/i) {
+			unless (exists ${$feature_hash}{'ID'}) {
+				print STDERR $RGsubinfo, "Error: no ID in col9 at line($.): ".$RGline."\n" ;
+				return  $GffKit_failure;
+			}
 			my $RGthismrnaid=${$feature_hash}{'ID'};
 			unless (exists ${$feature_hash}{'Parent'}) {
 				print STDERR $RGsubinfo, "Error: no ID in col9 at line($.): ".$RGline."\n" ;
@@ -1049,7 +1060,7 @@ sub ReadGff3 {
 #					return $GffKit_failure;
 				}
 			}
-			### Transfer nre phases
+			### Transfer new phases
 			for (my $RGi=0; $RGi<scalar(@{$RGcdsarray}); $RGi++) {
 				my ($RGx, $RGy)=@{${$RGcdsarray}[$RGi]};
 				unless (exists ${$RGcds}{$RGind_mrna}{'phase'}{$RGx} and exists ${$RGcds}{$RGind_mrna}{'phase'}{$RGx}{$RGy}) {

@@ -48,6 +48,24 @@ File operations
     * Test VCF geno if value or values(delimited by /, example: 1/0/1) contain 0
     * Return: 0=yes, 1=No
 
+=item ListMerger (out.sum, undefined_mark, In1, In2, ...)
+
+    * Merge multiple (>=2) list
+    * Return: 1=yes, 0=No
+        ### In1
+        Name1	Value1
+        Name2	value2
+
+        ### In2
+        Name1	Value3
+        Name4	value4
+
+        ### out.sum
+        #     	[In1] 	[IN2]
+        Name1	Value1	Value3
+        Name2	value2	[undef]
+        Name4	[undef]	value4
+
 =item MaxLength(@string_arr)
 
     * Return Maximum length given a array of strings
@@ -111,12 +129,12 @@ use Scalar::Util 'reftype';
 use Cwd;
 
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20171130';
+$VERSION     = '20190924';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList);
-%EXPORT_TAGS = ( DEFAULT => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList)],
-                 ALL    => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList)]);
+@EXPORT_OK   = qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList ListMerger);
+%EXPORT_TAGS = ( DEFAULT => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList ListMerger)],
+                 ALL    => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList ListMerger)]);
 
 
 my $MiscKit_success=1;
@@ -519,6 +537,87 @@ sub GetCascadeList {
 
 	return $MiscKit_success;
 }
+
+
+
+
+### Merge multiple (>=2) list
+### ListMerger (out.sum, undefined_mark, $arr_index={In1, In2, ...})
+
+### In1
+#Name1	Value1
+#Name2	value2
+
+### In2
+#Name1	Value3
+#Name4	value4
+
+### out.sum
+#     	[In1] 	[IN2]
+#Name1	Value1	Value3
+#Name2	value2	[undef]
+#Name4	[undef]	value4
+sub ListMerger {
+	my ($LMout, $LMundef_mark, $LMinputs)=@_;
+	
+	my $MRsubinfo='SUB(MiscKit::ListMerger)';
+	my $LMnumlines=0;
+	my %LMhash=();
+	$LMundef_mark="undef" unless (defined $LMundef_mark);
+	local *LMSUMOUT; local *LMINPUT;
+	
+	
+	foreach my $LMindin (@{$LMinputs}) {
+		unless (defined $LMindin and -s $LMindin) {
+			print STDERR $MRsubinfo, "Error: invalid file $LMindin\n";
+			return $MiscKit_failure;
+		}
+	}
+	
+	for (my $LMindex=0; $LMindex<scalar(@{$LMinputs}); $LMindex++) {
+		close LMINPUT if (defined fileno(LMINPUT));
+		unless (open(LMINPUT, '<', ${$LMinputs}[$LMindex])) {
+			print STDERR $MRsubinfo, "Error: can not open ${$LMinputs}[$LMindex]\n";
+			return $MiscKit_failure;
+		}
+		my %LMdup=();
+		while (my $LMline=<LMINPUT>) {
+			chomp $LMline;
+			next if ($LMline=~/^#/);
+			my @LMarr=split(/\t/, $LMline);
+			
+			if (exists $LMdup{$LMarr[0]}) {
+				print STDERR $MRsubinfo, "Error: duplicated ID $LMline\n";
+				return $MiscKit_failure;
+			}
+			$LMhash{$LMarr[0]}[$LMindex]=$LMarr[1];
+		}
+		close LMINPUT;
+	}
+	
+	close LMSUMOUT if (defined fileno(LMSUMOUT));
+	unless (open LMSUMOUT, ">", $LMout) {
+		print STDERR $MRsubinfo, "Error: can not write output file $LMout\n";
+		return $MiscKit_failure;
+	}
+	print LMSUMOUT "#IDs\t", join("\t", @{$LMinputs}), "\n";
+	foreach my $LMindex2 (sort keys %LMhash) {
+		my @LMArr2=@{$LMhash{$LMindex2}};
+		for (my $LMindex3=0; $LMindex3<scalar(@{$LMinputs});$LMindex3++) {
+			if (! defined $LMArr2[$LMindex3]) {
+				$LMArr2[$LMindex3]=$LMundef_mark;
+			}
+#			elsif ($LMArr2[$LMindex3] eq 'NaN') {
+#				$LMArr2[$LMindex3]=$LMundef_mark;
+#			}
+		}
+		print LMSUMOUT $LMindex2, "\t", join("\t", @LMArr2), "\n";
+	}
+	close LMSUMOUT;
+	
+	return $MiscKit_success;
+}
+
 
 
 #$MiscKit_success=1;$MiscKit_failure=0;
