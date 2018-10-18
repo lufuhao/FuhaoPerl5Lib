@@ -60,7 +60,7 @@ Perl Modules:
 =item ReadGff3($gffin[, $fasta])
 
     * Read GFF3 into hash
-    * ($success, $referenceids, $gene, $gene2mrna, $mrnas, $exons, $cds)=ReadGff3($gffin[, $fasta])
+    * ($success, $referenceids, $gene, $gene2mrna, $mrnas, $exons, $cds, $utr)=ReadGff3($gffin[, $fasta])
     * %referenceids  => ( $reference_id => $gene_start_pos => $gene_id => num++)
     * %gene2mrna     => ( $gene_id => $mrna_id => num++ )
     * %gene=($geneid => ('reference' => $arr[0],
@@ -155,7 +155,7 @@ use Bio::DB::Fasta;
 use Data::Dumper qw/Dumper/;
 use Storable qw/dclone/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20180920';
+$VERSION     = '20181018';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(GffReverseStrand ReadGff3 WriteGff3 ExonerateGff3Reformat AnnotationTransfer SortGeneOrder Gff3Renamer GuessLongestCDS GffAddUTR);
@@ -299,7 +299,7 @@ sub GffReverseStrand {
 
 
 ### Read GFF3 into hash
-### ($success, $referenceids, $gene, $gene2mrna, $mrnas, $exons, $cds)=ReadGff3($RGgffin[, $RGfasta])
+### ($success, $referenceids, $gene, $gene2mrna, $mrnas, $exons, $cds, $utr)=ReadGff3($RGgffin[, $RGfasta])
 ###
 ### %referenceids  => ( $reference_id => $gene_start_pos => $gene_id => num++)
 ### %gene2mrna     => ( $gene_id => $mrna_id => num++ )
