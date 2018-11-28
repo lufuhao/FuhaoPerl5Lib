@@ -76,7 +76,25 @@ File operations
     * Merge overlapped ranges
     * Example: {2=>10, 9=>15, 16=>20} => {2=>20}
     * Return: (1/0, $%ranges)
-    * 1=success, 0=failure
+        1=success, 0=failure
+
+=item MrnaSort (@mRNA_IDs)
+
+    * Sort mRNA by suffix number (.1 .2 .3) or alphabet order (.a .b .c)for one gene
+    * Return: (@sorted_mRNA_IDs)
+
+=item ReadConfig($config_file)
+
+    * Read configure files
+        # ignore line
+        [block1]
+        Param1      =        value1
+        Param2      =        value2
+        [block2]
+        Param3      =        value3
+    * Return: (1/0, $%ranges{block}{param})
+        1/0: 1=success, 0=failure
+        ${$ranges}{block1}->{param1}=value1;
 
 =item TestIntersect($start1, $end1, $start2, $end2)
 
@@ -129,12 +147,12 @@ use Scalar::Util 'reftype';
 use Cwd;
 
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20190924';
+$VERSION     = '20181128';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList ListMerger);
-%EXPORT_TAGS = ( DEFAULT => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList ListMerger)],
-                 ALL    => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList ListMerger)]);
+@EXPORT_OK   = qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList ListMerger ReadConfig MrnaSort);
+%EXPORT_TAGS = ( DEFAULT => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList ListMerger ReadConfig MrnaSort)],
+                 ALL    => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList ListMerger ReadConfig MrnaSort)]);
 
 
 my $MiscKit_success=1;
@@ -616,6 +634,108 @@ sub ListMerger {
 	close LMSUMOUT;
 	
 	return $MiscKit_success;
+}
+
+
+
+### Read configure files
+### ReadConfig($config_file)
+### Global:
+### Dependency:
+### Note:
+### $config_file
+### # ignore line
+### [block1]
+### Param1      =        value1
+### Param2      =        value2
+### [block2]
+### Param3      =        value3
+sub ReadConfig {
+	my $RCconf=shift;
+	
+	my $RCsubinfo='SUB(MiscKit::ReadConfig)';
+	my $RCret_config={};
+	my $RCblock='';
+	local *RCCONFIG;
+	
+	unless (defined $RCconf and -e $RCconf) {
+		print STDERR $RCsubinfo,"Error: invalid configure file\n";
+		return $MiscKit_failure;
+	}
+	close RCCONFIG if (defined fileno(RCCONFIG));
+	unless (open RCCONFIG, '<', $RCconf) {
+		print STDERR $RCsubinfo,"Error: can not open configure file\n";
+		return $MiscKit_failure;
+	}
+	while (my $RCline=<RCCONFIG>) {
+		chomp $RCline;
+		$RCline =~ s/^\s+//g;
+		$RCline =~ s/\s+$//g;
+# skipping comments and empty lines:
+		next unless ($RCline =~ /\S+/);
+		next if ($RCline =~ /^(\n|\#|;)/);
+# parsing the block name:
+		if ($RCline =~ /^\s*\[\s*([^\]]+)\s*\]$/) {
+			$RCblock=lc($1);
+			next;
+		}
+# parsing key/value pairs
+		if ($RCline =~ /^\s*([^=]*\w)\s*=\s*(.*)\s*$/) {
+			${$RCret_config}{$RCblock}->{lc($1)}=$2;
+			next;
+		}
+# if we came this far, the syntax couldn't be validated:
+		print STDERR $RCsubinfo, "Warnings: syntax error on line($.): \n",$RCline,"\n";
+	}
+	close RCCONFIG;
+	print $RCsubinfo, "Info: parameter set:\n";
+	foreach my $RCind_block (sort keys %{$RCret_config}) {
+		print "  BLOCK: $RCind_block\n";
+		foreach my $RCind_param (sort keys %{${$RCret_config}{$RCind_block}}) {
+			print "    $RCind_param  =  ", ${$RCret_config}{$RCind_block}->{$RCind_param},"\n";
+		}
+	}
+	print "\n";
+	return ($MiscKit_success, $RCret_config);
+}
+
+
+
+### Sort mRNA by suffix number or alphabet order for one gene
+### MrnaSort (@mRNA_IDs)
+### Return: (@sorted_mRNA_IDs)
+### Global:
+### Dependency:
+### Note:
+sub MrnaSort {
+	my @MSarr_in=@_;
+	
+	my $MStest_num=1;
+	my %MSorder=();
+	my @MSarr_out=();
+	
+	foreach my $MSind_mrna (@MSarr_in) {
+		if ($MSind_mrna=~/\.(\d+)$/) {
+			my $MSind_num=$1;
+			if (exists $MSorder{$MSind_num}) {
+				$MStest_num=0;last;
+			}
+			$MSorder{$MSind_num}=$MSind_mrna;
+		}
+		else {
+			$MStest_num=0;last;
+		}
+	}
+	if ($MStest_num==0) {
+		@MSarr_out=sort @MSarr_in;
+	}
+	else {
+		foreach (sort {$a<=>$b} keys %MSorder) {
+			push (@MSarr_out, $MSorder{$_})
+		}
+	}
+	
+	return @MSarr_out;
 }
 
 
