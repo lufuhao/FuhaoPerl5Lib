@@ -223,4 +223,35 @@ sub GetValues {
 	}
 }
 
+
+### calculate average
+sub CalAverage {
+	my ($CAdata)=@_;
+	if (not @$CAdata) {
+		die "Error: empty array\n";
+	}
+	my $CAtotal=0;
+	foreach (@$CAdata) {
+		$CAtotal+=$_;
+	}
+	my $CAaverage=$CAtotal/scalar(@$CAdata);
+	return $CAaverage;
+}
+
+### dependency: CalAverage
+### calculate standard deviation
+sub CalStdev {
+	my ($CSdata)=@_;
+	if (scalar(@$CSdata)==1) {
+		return 0;
+	}
+	my $CSaverage=&CalAverage($CSdata);
+	my $CStotal=0;
+	foreach (@$CSdata) {
+		$CStotal+= ($CSaverage-$_) ** 2;
+	}
+	my $CSstdev=($CStotal/(scalar(@$CSdata)-1)) ** 0.5;
+	return $CSstdev;
+}
+
 1;
