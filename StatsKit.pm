@@ -10,7 +10,7 @@ Statistics perl
 
 =head1 DESCRIPTION
 
-
+    * make statistics test
 
 =head1 FEEDBACK
 
@@ -27,7 +27,20 @@ Email: lufuhao@gmail.com (Always)
 
 =head1 CONTRIBUTORS
 
-None
+=over 2
+
+=item CalAverage (\@arr)
+
+    * calculate average
+    * Return: $average or die
+
+=item CalStdev (\@arr)
+
+    * Calculate standard deviation
+    * Dependency: CalAverage
+    * Return: $STDEV
+
+=back
 
 =head1 APPENDIX
 
@@ -44,12 +57,12 @@ use Data::Dumper qw/Dumper/;
 use FuhaoPerl5Lib::CmdKit;
 use Statistics::Basic qw/:all/;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20150603';
+$VERSION     = '20190825';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CallCorrelation OLD_CallCorrelation);
-%EXPORT_TAGS = ( DEFAULT => [qw(&CallCorrelation)],
-                 ALL    => [qw(&CallCorrelation)]);
+@EXPORT_OK   = qw(CallCorrelation CalAverage CalStdev);
+%EXPORT_TAGS = ( DEFAULT => [qw(CallCorrelation CalAverage CalStdev)],
+                 ALL    => [qw(CallCorrelation CalAverage CalStdev)]);
 
 my $StatsKit_success=1;
 my $StatsKit_failure=0;
@@ -108,7 +121,7 @@ sub OLD_CallCorrelation {
 	print Dumper $CCarr2;
 	my $CCcov = covariance ($CCarr1, $CCarr2);
 	my $CCcor = correlation ($CCarr1, $CCarr2);
-	print "SUB(CalCorr)Info: ###Covariance: $CCcov\t### Correlation: $CCcor\n";# if ($debug);
+	print "${CCsubinfo}Info: ###Covariance: $CCcov\t### Correlation: $CCcor\n";# if ($debug);
 	return ($StatsKit_success, $CCcov, $CCcor, $CCVelements);
 }
 
@@ -134,7 +147,11 @@ sub CallSqDev {
 	}
 	return $sum;
 }
- 
+### calculate Statistics::Basic correlation
+### &CalCorr(\@arr1, \@arr2)
+### Global: $verbose, $debug
+### Dependency: Statistics::Basic
+### Note:
 sub CallCorrelation {
 	my ($CCv1_arrindex, $CCv2_arrindex)=@_;
 	
@@ -208,10 +225,10 @@ sub CallCorrel {
 
 
 ###Get min/max value from a arr
-###&GetValues (min/max, @num_arr)
+###&GetValues ('min'/'max', @num_arr)
 ###Global: 
 ###Dependency:
-###Nnote:
+###Note:
 sub GetValues {
 	my ($GVindex, @GVnumbers)=@_;
 	@GVnumbers=sort {$a<=>$b} @GVnumbers;
@@ -224,7 +241,12 @@ sub GetValues {
 }
 
 
+
 ### calculate average
+### &CalAverage ($@arr)
+### Global: 
+### Dependency:
+### Note:
 sub CalAverage {
 	my ($CAdata)=@_;
 	if (not @$CAdata) {
@@ -238,8 +260,11 @@ sub CalAverage {
 	return $CAaverage;
 }
 
-### dependency: CalAverage
 ### calculate standard deviation
+### &CalStdev ($@arr)
+### Global: 
+### Dependency: CalAverage
+### Note:
 sub CalStdev {
 	my ($CSdata)=@_;
 	if (scalar(@$CSdata)==1) {
