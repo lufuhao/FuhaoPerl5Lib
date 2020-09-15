@@ -147,7 +147,7 @@ use Scalar::Util 'reftype';
 use Cwd;
 
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20181128';
+$VERSION     = '20200915';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
 @EXPORT_OK   = qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList ListMerger ReadConfig MrnaSort);
@@ -575,7 +575,7 @@ sub GetCascadeList {
 #Name1	Value1	Value3
 #Name2	value2	[undef]
 #Name4	[undef]	value4
-sub ListMerger {
+sub ListMergersingleCol {
 	my ($LMout, $LMundef_mark, $LMinputs)=@_;
 	
 	my $MRsubinfo='SUB(MiscKit::ListMerger)';
@@ -635,7 +635,93 @@ sub ListMerger {
 	
 	return $MiscKit_success;
 }
-
+### sipport multiple columns
+sub ListMerger {
+	my ($LMout, $LMundef_mark, $LMinputs)=@_;
+	
+	my $LMsubinfo='SUB(MiscKit::ListMergerMultiCols)';
+	my $LMnumlines=0;
+	my %LMhash=();
+	my %LMlength=();
+	my @LMheaders=("#IDs");
+	$LMundef_mark="undef" unless (defined $LMundef_mark);
+	local *LMSUMOUT; local *LMINPUT;
+	
+	foreach my $LMindin (@{$LMinputs}) {
+		unless (defined $LMindin and -s $LMindin) {
+			print STDERR $LMsubinfo, "Error: invalid file $LMindin\n";
+			return $MiscKit_failure;
+		}
+	}
+	
+	for (my $LMindex=0; $LMindex<scalar(@{$LMinputs}); $LMindex++) {
+		$LMnumlines=0;
+		close LMINPUT if (defined fileno(LMINPUT));
+		unless (open(LMINPUT, '<', ${$LMinputs}[$LMindex])) {
+			print STDERR $LMsubinfo, "Error: can not open ${$LMinputs}[$LMindex]\n";
+			return $MiscKit_failure;
+		}
+		my %LMdup=();
+		while (my $LMline=<LMINPUT>) {
+			chomp $LMline; $LMline=~s/[\r\n]$//; 
+			$LMnumlines++;
+			next if ($LMline=~/^#/);
+			my @LMarr=split(/\t/, $LMline);
+			
+			if (exists $LMdup{$LMarr[0]}) {
+				print STDERR $LMsubinfo, "Error: duplicated ID $LMline\n";
+				return $MiscKit_failure;
+			}
+			my $LMidentifier=shift @LMarr;
+			if ((! exists $LMlength{$LMindex}) or ($LMlength{$LMindex} < scalar(@LMarr))) {
+					$LMlength{$LMindex} = scalar(@LMarr);
+			}
+			@{$LMhash{$LMidentifier}{$LMindex}}=@LMarr;
+		}
+		close LMINPUT;
+		
+		print $LMsubinfo, "Info:  $LMnumlines  lines: ${$LMinputs}[$LMindex]\n";
+		
+		if ((! exists $LMlength{$LMindex} or ($LMlength{$LMindex}==0))) {
+			print STDERR "Error: empty elements for ${$LMinputs}[$LMindex]\n";
+			return $MiscKit_failure;
+		}
+		elsif ($LMlength{$LMindex}==1) {
+			push (@LMheaders, ${$LMinputs}[$LMindex]);
+		}
+		elsif ($LMlength{$LMindex}>1) {
+			push (@LMheaders, ${$LMinputs}[$LMindex]);
+			@LMheaders=(@LMheaders, ("") x ($LMlength{$LMindex}-1));
+		}
+	}
+	
+	print "Info: Total ", scalar(keys %LMhash), "\n";
+	
+	close LMSUMOUT if (defined fileno(LMSUMOUT));
+	unless (open LMSUMOUT, ">", $LMout) {
+		print STDERR $LMsubinfo, "Error: can not write output file $LMout\n";
+		return $MiscKit_failure;
+	}
+	print LMSUMOUT join("\t", @LMheaders), "\n";
+	foreach my $LMindex2 (sort keys %LMhash) {
+		my @LMArr2=();
+		my @LMarr_out=($LMindex2);
+		for (my $LMindex3=0; $LMindex3<scalar(@{$LMinputs});$LMindex3++) {
+			if (! exists $LMhash{$LMindex2}{$LMindex3}) {
+				@LMArr2=($LMundef_mark) x $LMlength{$LMindex3};
+			}
+			else {
+				@LMArr2=(@{$LMhash{$LMindex2}{$LMindex3}}, ($LMundef_mark) x ($LMlength{$LMindex3}-scalar(@{$LMhash{$LMindex2}{$LMindex3}})));
+			}
+			@LMarr_out=(@LMarr_out, @LMArr2);
+		}
+		print LMSUMOUT join("\t", @LMarr_out), "\n";
+	}
+	
+	close LMSUMOUT;
+	
+	return $MiscKit_success;
+}
 
 
 ### Read configure files
@@ -738,6 +824,21 @@ sub MrnaSort {
 	return @MSarr_out;
 }
 
+
+
+### return a duplicated N times string
+sub DuplicateNString {
+	my ($DNSstr, $DNSsep, $DNSnum)=@_;
+	
+	my $DNSret='';
+	my @DNAarr=();
+	
+	for (my $DNSx=0; $DNSx<$DNSnum; $DNSx++) {
+		push (@DNAarr, $DNSstr);
+	}
+	
+	return join($DNSsep, @DNAarr);
+}
 
 
 #$MiscKit_success=1;$MiscKit_failure=0;
