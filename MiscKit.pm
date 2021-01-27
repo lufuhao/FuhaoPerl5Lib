@@ -145,14 +145,15 @@ use Exporter;
 use Data::Dumper qw /Dumper/;
 use Scalar::Util 'reftype';
 use Cwd;
+use JSON;
 
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
-$VERSION     = '20200915';
+$VERSION     = '20210127';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList ListMerger ReadConfig MrnaSort);
-%EXPORT_TAGS = ( DEFAULT => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList ListMerger ReadConfig MrnaSort)],
-                 ALL    => [qw(IsReference IsZeroIn TestIntersect MaxLength FullDigit MergeRanges UrlEncode UrlDecode GetCascadeList ListMerger ReadConfig MrnaSort)]);
+@EXPORT_OK   = qw(FullDigit GetCascadeList IsReference IsZeroIn KeggJosnLoad ListMerger MaxLength MergeRanges MrnaSort ReadConfig TestIntersect UrlDecode UrlEncode);
+%EXPORT_TAGS = ( DEFAULT => [qw(FullDigit GetCascadeList IsReference IsZeroIn KeggJosnLoad ListMerger MaxLength MergeRanges MrnaSort ReadConfig TestIntersect UrlDecode UrlEncode)],
+                 ALL    => [qw(FullDigit GetCascadeList IsReference IsZeroIn KeggJosnLoad ListMerger MaxLength MergeRanges MrnaSort ReadConfig TestIntersect UrlDecode UrlEncode)]);
 
 
 my $MiscKit_success=1;
@@ -843,6 +844,147 @@ sub DuplicateNString {
 
 #$MiscKit_success=1;$MiscKit_failure=0;
 #my $MRsubinfo='SUB(MiscKit::MergeRanges)';
+
+
+
+sub JsonOpen {
+	my $JOjson=shift;
+	
+	my $JOsubinfo="SUB(MiscKit::JsonOpen)";
+	my $JOjsontext="";
+	use utf8;
+	
+	unless (-s $JOjson) {
+		print STDERR $JOsubinfo, "Error: invalid json file\n";
+		exit 100;
+	}
+	local $/=undef;
+	if (open my $JOfh, " < ", $JOjson) {
+		$JOjsontext = <$JOfh>;
+		close $JOfh;
+	}
+	
+	return $JOjsontext;
+}
+sub JsonLoad {
+	my $JLjson=shift;
+	
+	my $JLtext=JsonOpen($JLjson);
+	
+	my $JLdecode=JSON->new->utf8->decode($JLtext);
+#	print Dumper $JLdecode; ### for Test ###
+	
+	return $JLdecode;
+}
+sub getJsonName {
+	my $JNtext=shift;
+	
+	my $JNid='NA';
+	my $JNannot='NA';
+	
+	if ($JNtext=~/^(\d+)\s+(.+)$/) {
+		$JNid=$1;
+		$JNannot=$2;
+	}
+	elsif ($JNtext=~/^(ko\d+)$/) {
+		$JNid=$1;
+	}
+	elsif ($JNtext=~/^(K\d+)\s*(.*)$/) {
+		$JNid=$1;
+		$JNannot=$2;
+	}
+	else {
+		print STDERR "Warnings: unknown Name: $JNtext\n";
+		return ('NA', 'NA');
+	}
+	
+	return ($JNid, $JNtext);
+}
+sub KeggJosnLoad {
+	my $KJLjson=shift;
+	
+	my $KJLk2name={};
+	my $KJLko2pathway={};
+	
+	my $KJLsubinfo="SUB(MiscKit::KeggJosnLoad)";
+	my $KJLtext=JsonLoad($KJLjson);
+	
+	unless (exists ${$KJLtext}{'children'}) {
+		print STDERR $KJLsubinfo, "Error: invalid KEGG JSON file\n";
+		exit 100;
+	}
+	my ($KJLx1)=getJsonName(${$KJLtext}{'name'});
+	for (my $KJLa=0; $KJLa<scalar(@{${$KJLtext}{'children'}}); $KJLa++) {
+		my ($KJLx2, $KJLy2)=("NA", "NA");
+		if (exists ${$KJLtext}{'children'}[$KJLa]{'name'}) {
+			($KJLx2, $KJLy2)=getJsonName(${$KJLtext}{'children'}[$KJLa]{'name'});
+			$KJLx2="ko".$KJLx2;
+			if (exists ${$KJLk2name}{"$KJLx2"}) {
+				print STDERR $KJLsubinfo, "Error: duplicated Level2 pathway ID: $KJLx2\n";
+			}
+			else {
+				${$KJLk2name}{"$KJLx2"}=$KJLy2;
+			}
+		}
+		unless(exists ${$KJLtext}{'children'}[$KJLa]{'children'}) {
+			print STDERR $KJLsubinfo, "Warnings: 'children' $KJLa [name: $KJLx2] has no children\n";
+			next;
+		}
+		my $KJLchildren2=${$KJLtext}{'children'}[$KJLa]{'children'};
+		for (my $KJLb=0; $KJLb<scalar(@{$KJLchildren2}); $KJLb++) {
+			my ($KJLx3, $KJLy3)=("NA", "NA");
+			if (exists ${$KJLchildren2}[$KJLb]{'name'}) {
+				($KJLx3, $KJLy3)=getJsonName(${$KJLchildren2}[$KJLb]{'name'});
+				$KJLx3="ko".$KJLx3;
+				if (exists ${$KJLk2name}{"$KJLx3"}) {
+					print STDERR $KJLsubinfo, "Error: duplicated Level3 pathway ID: $KJLx3\n";
+				}
+				else {
+					${$KJLk2name}{"$KJLx3"}=$KJLy3;
+				}
+				
+			}
+			unless(exists ${$KJLchildren2}[$KJLb]{'children'}) {
+				print STDERR $KJLsubinfo, "Warnings: 'children' $KJLa 'children' $KJLb [name: $KJLx3] has no children\n";
+				next;
+			}
+			my $KJLchildren3=${$KJLchildren2}[$KJLb]{'children'};
+			for (my $KJLc=0; $KJLc<scalar(@{$KJLchildren3}); $KJLc++) {
+				my ($KJLx4, $KJLy4)=("NA", "NA");
+				if (exists ${$KJLchildren3}[$KJLc]{'name'}) {
+					($KJLx4, $KJLy4)=getJsonName(${$KJLchildren3}[$KJLc]{'name'});
+					$KJLx4="ko".$KJLx4;
+					if (exists ${$KJLk2name}{"$KJLx4"}) {
+						print STDERR $KJLsubinfo, "Error: duplicated Level4 pathway ID: $KJLx4\n";
+					}
+					else {
+						${$KJLk2name}{"$KJLx4"}=$KJLy4;
+					}
+				}
+				unless(exists ${$KJLchildren3}[$KJLc]{'children'}) {
+					print STDERR $KJLsubinfo, "Warnings: 'children' $KJLa 'children' $KJLb 'children' $KJLc [name: $KJLx4] has no name/children\n";
+					next;
+				}
+				my $KJLchildren4=${$KJLchildren3}[$KJLc]{'children'};
+				for (my $KJLd=0; $KJLd<scalar(@{$KJLchildren4}); $KJLd++) {
+					unless(exists ${$KJLchildren4}[$KJLd]{'name'}) {
+						print STDERR $KJLsubinfo, "Warnings: 'children' $KJLa 'children' $KJLb 'children' $KJLc 'children' $KJLd has no name\n";
+						next;
+					}
+					my ($KJLx5, $KJLy5)=getJsonName(${$KJLchildren4}[$KJLd]{'name'});
+					unless (exists ${$KJLk2name}{"$KJLx5"}) {
+						${$KJLk2name}{"$KJLx5"}=$KJLy5;
+					}
+					${$KJLko2pathway}{$KJLx5}{$KJLx4}++;
+				}
+			}
+		}
+	}
+#	print Dumper $KJLk2name;
+#	print Dumper $KJLko2pathway;
+	
+	return ($KJLko2pathway)
+}
 
 
 
