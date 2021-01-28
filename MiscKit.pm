@@ -885,6 +885,7 @@ sub getJsonName {
 	if ($JNtext=~/^(\d+)\s+(.+)$/) {
 		$JNid=$1;
 		$JNannot=$2;
+		$JNannot=~s/\[((PATH)|(BR)).*\]$//;
 	}
 	elsif ($JNtext=~/^(ko\d+)$/) {
 		$JNid=$1;
@@ -898,13 +899,14 @@ sub getJsonName {
 		return ('NA', 'NA');
 	}
 	
-	return ($JNid, $JNtext);
+	return ($JNid, $JNannot);
 }
 sub KeggJosnLoad {
 	my $KJLjson=shift;
 	
 	my $KJLk2name={};
 	my $KJLko2pathway={};
+	my $KJLko2name={};
 	
 	my $KJLsubinfo="SUB(MiscKit::KeggJosnLoad)";
 	my $KJLtext=JsonLoad($KJLjson);
@@ -972,8 +974,8 @@ sub KeggJosnLoad {
 						next;
 					}
 					my ($KJLx5, $KJLy5)=getJsonName(${$KJLchildren4}[$KJLd]{'name'});
-					unless (exists ${$KJLk2name}{"$KJLx5"}) {
-						${$KJLk2name}{"$KJLx5"}=$KJLy5;
+					unless (exists ${$KJLko2name}{"$KJLx5"}) {
+						${$KJLko2name}{"$KJLx5"}=$KJLy5;
 					}
 					${$KJLko2pathway}{$KJLx5}{$KJLx4}++;
 				}
@@ -983,7 +985,7 @@ sub KeggJosnLoad {
 #	print Dumper $KJLk2name;
 #	print Dumper $KJLko2pathway;
 	
-	return ($KJLko2pathway)
+	return ($KJLko2pathway, $KJLk2name, $KJLko2name)
 }
 
 
