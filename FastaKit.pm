@@ -97,6 +97,19 @@ Fasta -related tools
     * Dependancy: Bio::SeqIO;
     * Return: 1=Success    0=Failure
 
+=item FastaSpliterByBed(in_fasta, in_bed, out_fasta[.gz], lineleng)
+
+    * Split fasta long seq to shorter based on the coordinates defined in Fasta
+    * Dependancy: Bio::SeqIO;
+    * In_fasta: should be in FLAT text
+    * In_bed: 
+        1A_part1	0	293171175	1A	0	293171175
+        1A_part2	0	292095547	1A	293171175	585266722
+        1B_part1	0	341316541	1B	0	341316541
+        1B_part2	0	339795971	1B	341316541	681112512
+    * out_fasta: could be gzipped fasta
+    * Return: 1=Success    0=Failure
+    
 =item Fastq2Fasta ($input.fastq, $out.fa)
 
     * Convert fastq to fasta
@@ -276,15 +289,16 @@ use Data::Dumper qw /Dumper/;
 use FuhaoPerl5Lib::FileKit qw/MoveFile RetrieveDir MergeFiles/;
 use FuhaoPerl5Lib::CmdKit;
 use FuhaoPerl5Lib::MiscKit qw/IsReference FullDigit/;
+use Bio::Seq;
 use Bio::SeqIO;
 use Bio::DB::Fasta;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
 $VERSION     = '20180926';
 @ISA         = qw(Exporter);
 @EXPORT      = qw();
-@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq ReadFastaLength2);
-%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq ReadFastaLength2)],
-                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq ReadFastaLength2)]);
+@EXPORT_OK   = qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 CdHitEst RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq ReadFastaLength2 FastaSpliterByBed);
+%EXPORT_TAGS = ( DEFAULT => [qw(CdbFasta CdbYank CdbYankFromFile ExtractFastaSamtoolsID IndexFasta CreateFastaRegion RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq ReadFastaLength2 FastaSpliterByBed)],
+                 ALL    => [qw(CdbFasta CdbYank CdbYankFromFile IndexFasta CreateFastaRegion ExtractFastaSamtoolsID RunMira4 RenameFasta RunFqTrinity SplitFastaByNumber RunCap3 Fastq2Fasta SeqRevComp Codon2AA CountFasta CheckFastaIdDup RunEmbossStretcher AnalysisEmbossStretcherOutput NumSeq FastaDedup ExtractFastaSeqtk Frame3Translation Frame6Translation SplitFastaByLength ReadFastaLength ExtractFastaSamtoolsList SspaceOutRenamer AnalyzeMummerShowcoords RmSeqDesc RandomDNAgenerator GroupMummerShowcoords GetCdnaSeq ReadFastaLength2 FastaSpliterByBed)]);
 
 my $FastaKit_success=1;
 my $FastaKit_failure=0;
@@ -597,7 +611,7 @@ sub ExtractFastaSamtoolsList {
 #	}
 	while (my $EFSLline=<EFSLLIST>) {
 		chomp $EFSLline;
-		unless (exec_cmd_return("$EFSLpath_samtools faidx $EFSLinputfa ¡®$EFSLline¡¯ >> $EFSLoutputfa")) {
+		unless (exec_cmd_return("$EFSLpath_samtools faidx $EFSLinputfa $EFSLline >> $EFSLoutputfa")) {
 			print STDERR $EFSLsubinfo, "Error: samtools extract fasta running error: $EFSLline\n";
 			return $FastaKit_failure;
 		}
@@ -3030,6 +3044,99 @@ sub GetCdnaSeq {
 	return ($FastaKit_success, $GCScdnaseq);
 }
 
+
+
+
+sub FastaSpliterByBed {
+	my ($FSBBin_fas, $FSBBin_bed, $FSBBout_fas, $FSBBlinelen)=@_;
+	
+	my $FSBBnumline=0;
+	my $FSBBsubinfo="SUB(FastaKit::FastaSpliterByBed)";
+	my %FSBBoutseq=();
+	my $FSBBstrstart=0;
+	local *FSBBBEDIN; local *FSBBFAOUT;
+	
+	unless (defined $FSBBin_fas and -s $FSBBin_fas) {
+		print STDERR $FSBBsubinfo, "Error: invalid fasta input file\n";
+		return $FastaKit_failure;
+	}
+	unless (defined $FSBBin_bed and -s $FSBBin_bed) {
+		print STDERR $FSBBsubinfo, "Error: invalid BED input file\n";
+		return $FastaKit_failure;
+	}
+	unless (defined $FSBBout_fas) {
+		print STDERR $FSBBsubinfo, "Error: invalid BED input file\n";
+		return $FastaKit_failure;
+	}
+	unlink $FSBBout_fas if (-e $FSBBout_fas);
+	unless (defined $FSBBlinelen and $FSBBlinelen=~/^\d+$/) {
+		print STDERR $FSBBsubinfo, "Warnings: sequence line length was set to 70\n";
+		$FSBBlinelen=70;
+	}
+	
+	my $FSBBseqdb=Bio::DB::Fasta->new($FSBBin_fas);
+
+	close FSBBBEDIN if (defined fileno(FSBBBEDIN));
+	unless(open(FSBBBEDIN, "< ", $FSBBin_bed)) {
+		print STDERR $FSBBsubinfo, "Error: can not open BED input: $FSBBin_bed\n";
+		return $FastaKit_failure;
+	}
+	close FSBBFAOUT if (defined fileno(FSBBFAOUT));
+	if ($FSBBout_fas=~/\.[gG][zZ]$/) {
+		unless (open FSBBFAOUT, "| gzip -9 > $FSBBout_fas") {
+			print STDERR $FSBBsubinfo, "Error: can not write gzipped fasta output: $FSBBout_fas\n";
+			return $FastaKit_failure;
+		}
+	}
+	else {
+		unless (open FSBBFAOUT, "> $FSBBout_fas") {
+			print STDERR $FSBBsubinfo, "Error: can not write fasta output: $FSBBout_fas\n";
+			return $FastaKit_failure;
+		}
+	}
+	while (my $FSBBline=<FSBBBEDIN>) {
+		$FSBBnumline++;
+		next if ($FSBBline=~/^#/);
+		my @FSBBarr=split(/\t/, $FSBBline);
+		next unless (scalar(@FSBBarr) >=6);
+		unless (($FSBBarr[2]-$FSBBarr[1]) == ($FSBBarr[5]-$FSBBarr[4])) {
+			print STDERR $FSBBsubinfo, "Error: ($FSBBarr[2]-$FSBBarr[1]) != ($FSBBarr[5]-$FSBBarr[4]) at line($FSBBnumline): $FSBBline\n";
+			next;
+		}
+		unless ($FSBBarr[2]>=$FSBBarr[1]) {
+			print STDERR $FSBBsubinfo, "Error: $FSBBarr[2]>=$FSBBarr[1] at line($FSBBnumline): $FSBBline\n";
+			return $FastaKit_failure;
+		}
+		unless ($FSBBarr[5]>=$FSBBarr[4]) {
+			print STDERR $FSBBsubinfo, "Warnings: use reverse complementary due to $FSBBarr[5]<$FSBBarr[4] at line($FSBBnumline): $FSBBline\n";
+#			return $FastaKit_failure;
+		}
+		unless ($FSBBarr[5]<=$FSBBseqdb->length($FSBBarr[3])) {
+			print STDERR $FSBBsubinfo, "Error: $FSBBarr[5]> seqlen($FSBBarr[0]) ", $FSBBseqdb->length($FSBBarr[3]), " at line($FSBBnumline): $FSBBline\n";
+			return $FastaKit_failure;
+		}
+		if (exists $FSBBoutseq{$FSBBarr[0]}) {
+			print STDERR $FSBBsubinfo, "Error: duplicated out Fasta ID: $FSBBarr[0]\n";
+			return $FastaKit_failure;
+		}
+		$FSBBoutseq{$FSBBarr[0]}++;
+		my $FSBBstart=$FSBBarr[4]+1;
+		my $FSBBend=$FSBBarr[5];
+		my $FSBBseq=$FSBBseqdb->seq($FSBBarr[3], $FSBBstart => $FSBBend);
+#		print $FSBBarr[3], "\t", $FSBBseq, "\n"; ### for test ###
+		print FSBBFAOUT ">$FSBBarr[0]\n";
+		$FSBBstrstart=0;
+		while ($FSBBstrstart<(abs($FSBBend-$FSBBstart)+1)) {
+			my $FSBBstrend=$FSBBstrstart+$FSBBlinelen-1;
+			if ()
+			print FSBBFAOUT substr($FSBBseq, $FSBBstrstart, $FSBBlinelen), "\n";
+			$FSBBstrstart=$FSBBstrend+1;
+		}
+	}
+	close FSBBBEDIN;
+	close FSBBFAOUT;
+	return $FastaKit_success;
+}
 ### 
 ### 
 ### Global:
