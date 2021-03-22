@@ -885,7 +885,7 @@ sub getJsonName {
 	if ($JNtext=~/^(\d+)\s+(.+)$/) {
 		$JNid=$1;
 		$JNannot=$2;
-		$JNannot=~s/\[((PATH)|(BR)).*\]$//;
+		$JNannot=~s/\s+\[((PATH)|(BR)).*\]$//;
 	}
 	elsif ($JNtext=~/^(ko\d+)$/) {
 		$JNid=$1;
