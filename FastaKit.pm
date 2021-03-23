@@ -3126,9 +3126,12 @@ sub FastaSpliterByBed {
 #		print $FSBBarr[3], "\t", $FSBBseq, "\n"; ### for test ###
 		print FSBBFAOUT ">$FSBBarr[0]\n";
 		$FSBBstrstart=0;
+		my $FSBBlen=$FSBBlinelen;
 		while ($FSBBstrstart<(abs($FSBBend-$FSBBstart)+1)) {
-			my $FSBBstrend=$FSBBstrstart+$FSBBlinelen-1;
-			if ()
+			my $FSBBstrend=$FSBBstrstart+$FSBBlen-1;
+			if ($FSBBstrend>(abs($FSBBend-$FSBBstart)+1)) {
+				$FSBBlen=abs($FSBBend-$FSBBstart)+1-$FSBBstrstart;
+			}
 			print FSBBFAOUT substr($FSBBseq, $FSBBstrstart, $FSBBlinelen), "\n";
 			$FSBBstrstart=$FSBBstrend+1;
 		}
